@@ -7,24 +7,6 @@
 
 namespace Disassembler {
 
-    enum class ModEncoding {
-      None,
-      NoDisplacement,
-      EightBitDisplacement,
-      SixteenBitDisplacement,
-      RegisterMode
-    };
-
-    static const std::map<std::string, std::string> opcodeFromBinary{
-        {"100010", "mov"},   // Reg/Mem to/from Reg
-        {"1100011", "mov"},  // Immediate to Reg/Mem
-        {"1011", "mov"},     // Immediate to Reg
-        {"1010000", "mov"},  // Mem to Accumulator
-        {"1010001", "mov"},  // Accumulator to Mem
-        {"10001110", "mov"}, // Reg/Mem to Segment Reg
-        {"10001100", "mov"}, // Segment Reg to Reg/Mem
-    };
-
     static const std::map<std::string, std::string> regFromBinaryWord{
         {"000", "ax"}, {"001", "cx"}, {"010", "dx"}, {"011", "bx"},
         {"100", "sp"}, {"101", "bp"}, {"110", "si"}, {"111", "di"},
@@ -47,7 +29,7 @@ namespace Disassembler {
 
     std::string
     fromBinaryInstructionGetAssemblyInstruction(const std::bitset<48> &byte);
-    std::vector<std::bitset<48>>
+    std::vector<std::string>
     fromFileGetBinaryInstructions(const char *filename);
 
 }
