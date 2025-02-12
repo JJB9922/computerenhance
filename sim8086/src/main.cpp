@@ -16,7 +16,8 @@ int main(int argc, char *argv[]) {
   auto instructions = Disassembler::fromFileGetBinaryInstructions(filename);
 
   for (auto &i : instructions) {
-    auto instruction = Disassembler::fromBinaryInstructionGetAssemblyInstruction(i);
+    auto instruction =
+        Disassembler::fromBinaryInstructionGetAssemblyInstruction(i);
     std::cout << instruction << "\n";
   }
 

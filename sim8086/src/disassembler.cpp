@@ -12,7 +12,7 @@ fromBinaryInstructionGetAssemblyInstruction(const std::bitset<48> &byte) {
   std::string instruction;
 
   std::string fullOpcode = byte.to_string().substr(0, 8);
-  
+
   /*
   for (auto const& [key, val] : opcodeFromBinary)
   {
@@ -22,7 +22,6 @@ fromBinaryInstructionGetAssemblyInstruction(const std::bitset<48> &byte) {
     }
   }
 */
-
 
   std::bitset<6> opcode = std::bitset<6>(byte.to_string().substr(0, 6));
   std::bitset<1> d = std::bitset<1>(byte.to_string().substr(6, 1));
@@ -130,16 +129,14 @@ fromFileGetBinaryInstructions(const char *filename) {
   is.seekg(0, std::ios_base::end);
   auto lengthInChars = is.tellg();
 
-  for (uint8_t i = 0; i < lengthInChars; i +=2) {
+  for (uint8_t i = 0; i < lengthInChars; i += 2) {
     char c[6];
     is.seekg(i);
     is.read(c, 2);
-    std::bitset<48> inst(std::bitset<8>(c[0]).to_string() +
-                         std::bitset<8>(c[1]).to_string() + 
-                         std::bitset<8>(c[2]).to_string() +
-                         std::bitset<8>(c[3]).to_string() + 
-                         std::bitset<8>(c[4]).to_string() +
-                         std::bitset<8>(c[5]).to_string());
+    std::bitset<48> inst(
+        std::bitset<8>(c[0]).to_string() + std::bitset<8>(c[1]).to_string() +
+        std::bitset<8>(c[2]).to_string() + std::bitset<8>(c[3]).to_string() +
+        std::bitset<8>(c[4]).to_string() + std::bitset<8>(c[5]).to_string());
 
     std::cout << inst << "\n";
     instructions.push_back(inst);

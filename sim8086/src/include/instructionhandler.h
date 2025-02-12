@@ -2,7 +2,7 @@
 #ifndef INSTRUCTION_HANDLER_H
 
 enum class Instruction {
-    MOV = 0,
+  MOV = 0,
 
 }
 
