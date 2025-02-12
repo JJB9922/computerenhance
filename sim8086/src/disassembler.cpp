@@ -4,7 +4,6 @@
 #include <fstream>
 #include <ios>
 #include <iostream>
-#include <sstream>
 
 namespace Disassembler
 {
@@ -12,6 +11,7 @@ namespace Disassembler
   std::string
   fromBinaryInstructionGetAssemblyInstruction(const std::bitset<48> &byte)
   {
+    return std::string();
   }
 
   InstructionHandler::OpCode GetOpcode(char &c)
