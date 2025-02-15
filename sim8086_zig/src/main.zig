@@ -16,11 +16,11 @@ pub fn main() !void {
     defer listingFile.close();
 
     // TODO: Get file as console args
-    const binaryArray = try fp.binaryArrayFromCompiledAsm(listingFile);
+    const binaryFromAsmResult = try fp.binaryArrayFromCompiledAsm(listingFile);
 
-    if (@TypeOf(binaryArray) == error{binaryFromAsmError}) {
-        stderr.print("Could not parse asm binary", .{});
+    if (@TypeOf(binaryFromAsmResult) == error{binaryFromAsmError}) {
+        stderr.print("Could not parse asm binary: {s}", .{binaryFromAsmResult});
     }
 
-    try stdout.print("Binary from file:\n{s}\n", .{binaryArray});
+    try stdout.print("Binary from file:\n{s}\n", .{binaryFromAsmResult});
 }
