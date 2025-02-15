@@ -1,7 +1,7 @@
 [
   {
     "arguments": [
-      "/usr/bin/clang++",
+      "/nix/store/d32x2hd64mhi6mrngr3690pf9g5lrqi3-clang-wrapper-19.1.7/bin/clang++",
       "-std=c++17",
       "-Wall",
       "-I",
@@ -11,13 +11,29 @@
       "build/disassembler.o",
       "src/disassembler.cpp"
     ],
-    "directory": "/Users/jj/Documents/Projects/computerenhance/sim8086",
-    "file": "/Users/jj/Documents/Projects/computerenhance/sim8086/src/disassembler.cpp",
-    "output": "/Users/jj/Documents/Projects/computerenhance/sim8086/build/disassembler.o"
+    "directory": "/Users/jj/Documents/development/projects/computerenhance/sim8086",
+    "file": "/Users/jj/Documents/development/projects/computerenhance/sim8086/src/disassembler.cpp",
+    "output": "/Users/jj/Documents/development/projects/computerenhance/sim8086/build/disassembler.o"
   },
   {
     "arguments": [
-      "/usr/bin/clang++",
+      "/nix/store/d32x2hd64mhi6mrngr3690pf9g5lrqi3-clang-wrapper-19.1.7/bin/clang++",
+      "-std=c++17",
+      "-Wall",
+      "-I",
+      "src/include",
+      "-c",
+      "-o",
+      "build/instructionhandler.o",
+      "src/instructionhandler.cpp"
+    ],
+    "directory": "/Users/jj/Documents/development/projects/computerenhance/sim8086",
+    "file": "/Users/jj/Documents/development/projects/computerenhance/sim8086/src/instructionhandler.cpp",
+    "output": "/Users/jj/Documents/development/projects/computerenhance/sim8086/build/instructionhandler.o"
+  },
+  {
+    "arguments": [
+      "/nix/store/d32x2hd64mhi6mrngr3690pf9g5lrqi3-clang-wrapper-19.1.7/bin/clang++",
       "-std=c++17",
       "-Wall",
       "-I",
@@ -27,8 +43,8 @@
       "build/main.o",
       "src/main.cpp"
     ],
-    "directory": "/Users/jj/Documents/Projects/computerenhance/sim8086",
-    "file": "/Users/jj/Documents/Projects/computerenhance/sim8086/src/main.cpp",
-    "output": "/Users/jj/Documents/Projects/computerenhance/sim8086/build/main.o"
+    "directory": "/Users/jj/Documents/development/projects/computerenhance/sim8086",
+    "file": "/Users/jj/Documents/development/projects/computerenhance/sim8086/src/main.cpp",
+    "output": "/Users/jj/Documents/development/projects/computerenhance/sim8086/build/main.o"
   }
 ]
