@@ -22,16 +22,19 @@ pub fn main() !void {
 
     defer listingFile.close();
 
-    const binaryFromAsmResult = try fp.binaryArrayFromCompiledAsm(listingFile);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    if (@TypeOf(binaryFromAsmResult) == fp.FileProcessingError) {
-        try stderr.print("Could not parse asm binary.\n", .{});
-        return binaryFromAsmResult;
-    }
+    const binaryFromAsmResult = fp.binaryArrayFromCompiledAsm(listingFile, allocator) catch |err| {
+        try stderr.print("Could not get binary from compiled asm.", .{});
+        return err;
+    };
+    defer allocator.free(binaryFromAsmResult);
 
-    try stdout.print("Binary from file:\n{s}\n", .{binaryFromAsmResult});
+    try stdout.print("Binary from file:\n{b}\n", .{binaryFromAsmResult});
 
     try stdout.print("Instructions in file:\n", .{});
-    const testVal = ds.instructionFromBinaryOpcode(binaryFromAsmResult[0]);
-    try stdout.print("{s}", .{testVal});
+    const testVal = try ds.instructionFromBinaryOpcode(binaryFromAsmResult[0]);
+    try stdout.print("{s}\n", .{testVal});
 }
