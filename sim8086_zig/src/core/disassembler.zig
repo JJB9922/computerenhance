@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const MOVType = enum { RegMemToFromReg, ImmToRegMem, ImmToReg, MemToAcc, AccToMem, RegMemToSegReg, SegRegToRegMem };
+const movtype = enum { reg_mem_to_from_reg, imm_to_reg_mem, imm_to_reg, mem_to_acc, acc_to_mem, reg_mem_to_seg_reg, seg_reg_to_reg_mem };
 
-fn getSingleRegister(register: u8, isWordMode: bool) []const u8 {
-    if (isWordMode) {
+fn get_single_register(register: u8, is_word_mode: bool) []const u8 {
+    if (is_word_mode) {
         // 8086 User Man. 4-20
         if (register == 0b00000000) return "ax";
         if (register == 0b00000001 or register == 0b00001000) return "cx";
@@ -27,19 +27,19 @@ fn getSingleRegister(register: u8, isWordMode: bool) []const u8 {
     return "";
 }
 
-fn parseMOV(allocator: std.mem.Allocator, movType: MOVType, opcode: []u8) ![]const u8 {
-    var flippedRegisters: bool = false;
-    var isWordMode: bool = false;
+fn parse_mov(allocator: std.mem.Allocator, mov_type: movtype, opcode: []u8) ![]const u8 {
+    var flipped_registers: bool = false;
+    var is_word_mode: bool = false;
     var displacement: u8 = 0;
-    var isRegisterMode: bool = false;
+    var is_register_mode: bool = false;
 
-    switch (movType) {
-        MOVType.RegMemToFromReg => {
+    switch (mov_type) {
+        movtype.reg_mem_to_from_reg => {
             if (opcode[0] & 0b00000011 == 0b00000010) {
-                flippedRegisters = true;
+                flipped_registers = true;
             }
             if (opcode[0] & 0b00000011 == 0b00000001) {
-                isWordMode = true;
+                is_word_mode = true;
             }
 
             if (opcode[1] & 0b11000000 == 0b01000000) {
@@ -51,12 +51,12 @@ fn parseMOV(allocator: std.mem.Allocator, movType: MOVType, opcode: []u8) ![]con
             }
 
             if (opcode[1] & 0b11000000 == 0b11000000) {
-                isRegisterMode = true;
+                is_register_mode = true;
             }
 
-            const sourceReg = getSingleRegister(opcode[1] & 0b00111000, isWordMode);
-            const destReg = getSingleRegister(opcode[1] & 0b00000111, isWordMode);
-            return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ "mov", destReg, sourceReg });
+            const source_reg = get_single_register(opcode[1] & 0b00111000, is_word_mode);
+            const dest_reg = get_single_register(opcode[1] & 0b00000111, is_word_mode);
+            return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ "mov", dest_reg, source_reg });
         },
         else => {
             return "";
@@ -64,11 +64,13 @@ fn parseMOV(allocator: std.mem.Allocator, movType: MOVType, opcode: []u8) ![]con
     }
 }
 
-pub fn instructionFromBinaryOpcodeArray(allocator: std.mem.Allocator, opcode: []u8) ![]const u8 {
+pub fn instruction_from_binary_opcode_array(allocator: std.mem.Allocator, opcode: []u8) ![]const u8 {
     if ((opcode[0] & 0b11111100) == 0b10001000) {
-        const instruction = try parseMOV(allocator, MOVType.RegMemToFromReg, opcode);
+        const instruction = try parse_mov(allocator, movtype.reg_mem_to_from_reg, opcode);
         return instruction;
     }
 
     return "";
 }
+
+pub fn get_needed_bytes() !void {}

@@ -15,29 +15,32 @@ pub fn main() !void {
         return;
     }
 
-    var listingFile = std.fs.cwd().openFile(args[1], .{}) catch |err| {
+    var listing_file = std.fs.cwd().openFile(args[1], .{}) catch |err| {
         try stderr.print("Could not open specified file\n", .{});
         return err;
     };
 
-    defer listingFile.close();
+    defer listing_file.close();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer _ = arena.deinit();
+    const allocator = arena.allocator();
 
-    const binaryFromAsmResult = fp.binaryArrayFromCompiledAsm(listingFile, allocator) catch |err| {
+    const binary_from_asm_result = fp.binary_array_from_compiled_asm(listing_file, allocator) catch |err| {
         try stderr.print("Could not get binary from compiled asm.", .{});
         return err;
     };
 
-    defer allocator.free(binaryFromAsmResult);
+    defer allocator.free(binary_from_asm_result);
 
-    try stdout.print("Binary from file:\n{b}\n\n", .{binaryFromAsmResult});
+    try stdout.print("Binary from file:\n{b:0>8}\n\n", .{binary_from_asm_result});
 
+    const needed_bytes = try ds.get_needed_bytes();
+    _ = needed_bytes;
     try stdout.print("Instructions:\n\nbits 16\n\n", .{});
-    for (0..binaryFromAsmResult.len - 1) |i| {
-        const instruction = try ds.instructionFromBinaryOpcodeArray(allocator, binaryFromAsmResult[i .. i + 2]);
+
+    for (0..binary_from_asm_result.len - 1) |i| {
+        const instruction = try ds.instruction_from_binary_opcode_array(allocator, binary_from_asm_result[i .. i + 2]);
         try stdout.print("{s}", .{instruction});
         allocator.free(instruction);
     }
