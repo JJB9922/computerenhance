@@ -39,6 +39,7 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
     // 8086 User Man. 4-22
     switch (instruction_type) {
         instructiontype.mov_A => {
+            std.debug.assert(instruction.len > 1 and instruction.len < 5);
             if (instruction[0] & 0b00000011 == 0b00000010) {
                 flipped_registers = true;
             }
@@ -76,6 +77,8 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
         },
         instructiontype.mov_B => {},
         instructiontype.mov_C => {
+            std.debug.assert(instruction.len > 1 and instruction.len < 4);
+
             if (instruction.len == 3) {
                 is_word_mode = true;
             }
@@ -83,7 +86,7 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
             const dest_reg = get_single_register(instruction[0] & 0b00000111, is_word_mode);
 
             if (is_word_mode) {
-                const data: i16 = @as(i8, @bitCast((instruction[1] << 0b00000100))) | @as(i8, @bitCast(instruction[2]));
+                const data: i16 = @as(i16, instruction[2]) << 8 | @as(i16, instruction[1]);
                 return try std.fmt.allocPrint(allocator, "{s} {s}, {d}\n", .{ "mov", dest_reg, data });
             } else {
                 const data: i8 = @bitCast(instruction[1]);
