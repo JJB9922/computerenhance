@@ -35,13 +35,24 @@ pub fn main() !void {
 
     try stdout.print("Binary from file:\n{b:0>8}\n\n", .{binary_from_asm_result});
 
-    const needed_bytes = try ds.get_needed_bytes();
-    _ = needed_bytes;
+    var binary_pointer: u8 = 0;
+
     try stdout.print("Instructions:\n\nbits 16\n\n", .{});
 
-    for (0..binary_from_asm_result.len - 1) |i| {
-        const instruction = try ds.instruction_from_binary_opcode_array(allocator, binary_from_asm_result[i .. i + 2]);
+    for (0..binary_from_asm_result.len - 1) |_| {
+        const needed_bytes = ds.get_needed_bytes(binary_from_asm_result[binary_pointer .. binary_pointer + 2]) catch |err| {
+            try stderr.print("Unhandled instruction encountered.", .{});
+            return err;
+        };
+
+        if (needed_bytes == 0) {
+            try stdout.print("EOF reached.", .{});
+            break;
+        }
+
+        const instruction = try ds.instruction_from_binary_opcode_array(allocator, binary_from_asm_result[binary_pointer .. binary_pointer + needed_bytes]);
         try stdout.print("{s}", .{instruction});
         allocator.free(instruction);
+        binary_pointer += needed_bytes;
     }
 }

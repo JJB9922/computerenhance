@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const disassemblererror = error{unhandled_instruction};
 const movtype = enum { reg_mem_to_from_reg, imm_to_reg_mem, imm_to_reg, mem_to_acc, acc_to_mem, reg_mem_to_seg_reg, seg_reg_to_reg_mem };
 
 fn get_single_register(register: u8, is_word_mode: bool) []const u8 {
@@ -73,4 +74,28 @@ pub fn instruction_from_binary_opcode_array(allocator: std.mem.Allocator, opcode
     return "";
 }
 
-pub fn get_needed_bytes() !void {}
+// Can always figure out needed bytes for opcode from first couple bytes of the opcode
+pub fn get_needed_bytes(instruction: []u8) !u8 {
+    if ((instruction[0] & 0b11111100) == 0b10001000) {
+        const mod_mask = 0b11000000;
+        const rm_mask = 0b00000111;
+
+        if ((instruction[1] & mod_mask == 0b00000000 and instruction[1] & rm_mask == 0b00000110) or instruction[1] & mod_mask == 0b10000000) {
+            return 4;
+        }
+
+        if ((instruction[1] & mod_mask == 0b00000000 and instruction[1] & rm_mask != 0b00000110) or instruction[1] & mod_mask == 0b11000000) {
+            return 2;
+        }
+
+        if (instruction[1] & mod_mask == 0b01000000) {
+            return 3;
+        }
+    }
+
+    if (instruction[0] & 0b11111111 == 0b00000000) {
+        return 0;
+    } else {
+        return disassemblererror.unhandled_instruction;
+    }
+}
