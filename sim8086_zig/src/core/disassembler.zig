@@ -5,6 +5,80 @@ const disassemblererror = error{unhandled_instruction};
 // TODO: Fix awful naming
 const instructiontype = enum { none, mov_A, mov_B, mov_C, mov_D, mov_E, mov_G, mov_F };
 
+fn get_effective_address(mod: []const u8, rm: []const u8) []const u8 {
+    if (std.mem.eql(u8, mod, "00")) {
+        if (std.mem.eql(u8, rm, "000")) {
+            return "[bx + si]";
+        }
+
+        if (std.mem.eql(u8, rm, "011")) {
+            return "[bp + di]";
+        }
+    }
+
+    return "";
+}
+
+fn rm_from_instruction(instruction: u8) []const u8 {
+    const rm_mask = 0b00000111;
+
+    if (instruction & rm_mask == 0b00000000) {
+        return "000";
+    }
+
+    if (instruction & rm_mask == 0b00000001) {
+        return "001";
+    }
+
+    if (instruction & rm_mask == 0b00000010) {
+        return "010";
+    }
+
+    if (instruction & rm_mask == 0b00000011) {
+        return "011";
+    }
+
+    if (instruction & rm_mask == 0b00000100) {
+        return "100";
+    }
+
+    if (instruction & rm_mask == 0b00000101) {
+        return "101";
+    }
+
+    if (instruction & rm_mask == 0b00000110) {
+        return "110";
+    }
+
+    if (instruction & rm_mask == 0b00000111) {
+        return "111";
+    }
+
+    return "";
+}
+
+fn mod_from_instruction(instruction: u8) []const u8 {
+    const mod_mask = 0b11000000;
+
+    if (instruction & mod_mask == 0b00000000) {
+        return "00";
+    }
+
+    if (instruction & mod_mask == 0b01000000) {
+        return "01";
+    }
+
+    if (instruction & mod_mask == 0b10000000) {
+        return "10";
+    }
+
+    if (instruction & mod_mask == 0b11000000) {
+        return "11";
+    }
+
+    return "";
+}
+
 fn get_single_register(register: u8, is_word_mode: bool) []const u8 {
     if (is_word_mode) {
         // 8086 User Man. 4-20
@@ -43,7 +117,7 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
             if (instruction[0] & 0b00000011 == 0b00000010) {
                 flipped_registers = true;
             }
-            if (instruction[0] & 0b00000011 == 0b00000001) {
+            if (instruction[0] & 0b00000001 == 0b00000001) {
                 is_word_mode = true;
             }
 
@@ -59,21 +133,21 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
                 is_register_mode = true;
             }
 
-            const source_reg = get_single_register(instruction[1] & 0b00111000, is_word_mode);
             const dest_reg = get_single_register(instruction[1] & 0b00000111, is_word_mode);
+            const mod = mod_from_instruction(instruction[1]);
+            const rm = rm_from_instruction(instruction[1]);
+            std.debug.assert(!std.mem.eql(u8, mod, ""));
 
-            // TODO: Handle disp
-            if (displacement == 0) {
+            if (std.mem.eql(u8, mod, "11")) {
+                const source_reg = get_single_register(instruction[1] & 0b00111000, is_word_mode);
+
+                // TODO: Handle displacement
                 return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ "mov", dest_reg, source_reg });
             }
 
-            if (displacement == 8) {
-                return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ "mov", dest_reg, source_reg });
-            }
+            const source_reg = get_effective_address(mod, rm);
 
-            if (displacement == 16) {
-                return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ "mov", dest_reg, source_reg });
-            }
+            return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ "mov", dest_reg, source_reg });
         },
         instructiontype.mov_B => {},
         instructiontype.mov_C => {
@@ -107,15 +181,19 @@ pub fn get_bytes_needed_and_instruction_type(instruction: []u8) !struct { bytes_
     const mod_mask = 0b11000000;
     const rm_mask = 0b00000111;
 
+    // TODO: Replace mod calcs with helper function
     if ((instruction[0] & 0b11111100) == 0b10001000) {
+        // 00 or 11
         if ((instruction[1] & mod_mask == 0b00000000 and instruction[1] & rm_mask == 0b00000110) or instruction[1] & mod_mask == 0b10000000) {
             return .{ .bytes_needed = 4, .instruction_type = instructiontype.mov_A };
         }
 
+        // 01
         if ((instruction[1] & mod_mask == 0b00000000 and instruction[1] & rm_mask != 0b00000110) or instruction[1] & mod_mask == 0b11000000) {
             return .{ .bytes_needed = 2, .instruction_type = instructiontype.mov_A };
         }
 
+        // 10
         if (instruction[1] & mod_mask == 0b01000000) {
             return .{ .bytes_needed = 3, .instruction_type = instructiontype.mov_A };
         }
