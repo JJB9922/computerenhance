@@ -40,19 +40,24 @@ pub fn main() !void {
     try stdout.print("Instructions:\n\nbits 16\n\n", .{});
 
     for (0..binary_from_asm_result.len - 1) |_| {
-        const needed_bytes = ds.get_needed_bytes(binary_from_asm_result[binary_pointer .. binary_pointer + 2]) catch |err| {
-            try stderr.print("Unhandled instruction encountered.", .{});
-            return err;
-        };
-
-        if (needed_bytes == 0) {
-            try stdout.print("EOF reached.", .{});
+        if (binary_pointer >= binary_from_asm_result.len) {
+            try stdout.print("EOF reached.\n", .{});
             break;
         }
 
-        const instruction = try ds.instruction_from_binary_opcode_array(allocator, binary_from_asm_result[binary_pointer .. binary_pointer + needed_bytes]);
+        const bytes_needed_and_instruction_type = ds.get_bytes_needed_and_instruction_type(binary_from_asm_result[binary_pointer .. binary_pointer + 2]) catch |err| {
+            try stderr.print("Unhandled instruction encountered.\n", .{});
+            return err;
+        };
+
+        if (bytes_needed_and_instruction_type.bytes_needed == 0) {
+            try stdout.print("EOF reached.\n", .{});
+            break;
+        }
+
+        const instruction = try ds.parse_instruction(allocator, bytes_needed_and_instruction_type.instruction_type, binary_from_asm_result[binary_pointer .. binary_pointer + bytes_needed_and_instruction_type.bytes_needed]);
         try stdout.print("{s}", .{instruction});
         allocator.free(instruction);
-        binary_pointer += needed_bytes;
+        binary_pointer += bytes_needed_and_instruction_type.bytes_needed;
     }
 }
