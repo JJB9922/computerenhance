@@ -5,7 +5,7 @@ const disassemblererror = error{unhandled_instruction};
 // TODO: Fix awful naming
 const instructiontype = enum { none, mov_A, mov_B, mov_C, mov_D, mov_E, mov_G, mov_F };
 
-fn get_effective_address(mod: []const u8, rm: []const u8) []const u8 {
+fn get_effective_address(allocator: std.mem.Allocator, mod: []const u8, rm: []const u8, instruction: []u8) ![]const u8 {
     if (std.mem.eql(u8, mod, "00")) {
         if (std.mem.eql(u8, rm, "000")) {
             return "[bx + si]";
@@ -13,6 +13,33 @@ fn get_effective_address(mod: []const u8, rm: []const u8) []const u8 {
 
         if (std.mem.eql(u8, rm, "011")) {
             return "[bp + di]";
+        }
+
+        if (std.mem.eql(u8, rm, "001")) {
+            return "[bx + di]";
+        }
+
+        if (std.mem.eql(u8, rm, "010")) {
+            return "[bp + si]";
+        }
+    }
+
+    if (std.mem.eql(u8, mod, "01")) {
+        if (std.mem.eql(u8, rm, "110")) {
+            return "[bp]";
+        }
+
+        if (std.mem.eql(u8, rm, "000")) {
+            const result = try std.fmt.allocPrint(allocator, "[bx + si + {d}]", .{instruction[2]});
+            return result;
+        }
+    }
+
+    if (std.mem.eql(u8, mod, "10")) {
+        if (std.mem.eql(u8, rm, "000")) {
+            const sixteen_bit_result: i16 = @as(i16, instruction[3]) << 8 | @as(i16, instruction[2]);
+            const result = try std.fmt.allocPrint(allocator, "[bx + si + {d}]", .{sixteen_bit_result});
+            return result;
         }
     }
 
@@ -100,7 +127,6 @@ fn get_single_register(register: u8, is_word_mode: bool) []const u8 {
         if (register == 0b00000110 or register == 0b00110000) return "dh";
         if (register == 0b00000111 or register == 0b00111000) return "bh";
     }
-
     return "";
 }
 
@@ -114,18 +140,20 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
     switch (instruction_type) {
         instructiontype.mov_A => {
             std.debug.assert(instruction.len > 1 and instruction.len < 5);
-            if (instruction[0] & 0b00000011 == 0b00000010) {
+            if (instruction[0] & 0b00000010 == 0b00000010) {
                 flipped_registers = true;
             }
             if (instruction[0] & 0b00000001 == 0b00000001) {
                 is_word_mode = true;
             }
 
-            if (instruction[1] & 0b11000000 == 0b01000000) {
+            const mod = mod_from_instruction(instruction[1]);
+
+            if (std.mem.eql(u8, mod, "01")) {
                 displacement = 8;
             }
 
-            if (instruction[1] & 0b11000000 == 0b10000000) {
+            if (std.mem.eql(u8, mod, "10")) {
                 displacement = 16;
             }
 
@@ -133,19 +161,18 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
                 is_register_mode = true;
             }
 
-            const dest_reg = get_single_register(instruction[1] & 0b00000111, is_word_mode);
-            const mod = mod_from_instruction(instruction[1]);
             const rm = rm_from_instruction(instruction[1]);
             std.debug.assert(!std.mem.eql(u8, mod, ""));
 
+            const dest_reg = get_single_register(instruction[1] & 0b00000111, is_word_mode);
+            var source_reg = try get_effective_address(allocator, mod, rm, instruction);
+
             if (std.mem.eql(u8, mod, "11")) {
-                const source_reg = get_single_register(instruction[1] & 0b00111000, is_word_mode);
+                source_reg = get_single_register(instruction[1] & 0b00111000, is_word_mode);
 
                 // TODO: Handle displacement
                 return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ "mov", dest_reg, source_reg });
             }
-
-            const source_reg = get_effective_address(mod, rm);
 
             return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ "mov", dest_reg, source_reg });
         },
