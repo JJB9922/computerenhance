@@ -30,12 +30,15 @@ pub fn main() !void {
         try stderr.print("Could not get binary from compiled asm.", .{});
         return err;
     };
+
     defer allocator.free(binaryFromAsmResult);
 
-    try stdout.print("Binary from file:\n{b}\n", .{binaryFromAsmResult});
+    try stdout.print("Binary from file:\n{b}\n\n", .{binaryFromAsmResult});
 
-    try stdout.print("Instructions in file:\n", .{});
-    const testVal = try ds.instructionFromBinaryOpcode(allocator, binaryFromAsmResult[0..2]);
-    defer allocator.free(testVal);
-    try stdout.print("{s}\n", .{testVal});
+    try stdout.print("Instructions:\n\nbits 16\n\n", .{});
+    for (0..binaryFromAsmResult.len - 1) |i| {
+        const instruction = try ds.instructionFromBinaryOpcodeArray(allocator, binaryFromAsmResult[i .. i + 2]);
+        try stdout.print("{s}", .{instruction});
+        allocator.free(instruction);
+    }
 }
