@@ -35,6 +35,7 @@ pub fn main() !void {
     try stdout.print("Binary from file:\n{b}\n", .{binaryFromAsmResult});
 
     try stdout.print("Instructions in file:\n", .{});
-    const testVal = try ds.instructionFromBinaryOpcode(binaryFromAsmResult[0]);
+    const testVal = try ds.instructionFromBinaryOpcode(allocator, binaryFromAsmResult[0..2]);
+    defer allocator.free(testVal);
     try stdout.print("{s}\n", .{testVal});
 }
