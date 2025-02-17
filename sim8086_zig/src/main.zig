@@ -15,30 +15,47 @@ pub fn main() !void {
         return;
     }
 
-    var listingFile = std.fs.cwd().openFile(args[1], .{}) catch |err| {
+    var listing_file = std.fs.cwd().openFile(args[1], .{}) catch |err| {
         try stderr.print("Could not open specified file\n", .{});
         return err;
     };
 
-    defer listingFile.close();
+    defer listing_file.close();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer _ = arena.deinit();
+    const allocator = arena.allocator();
 
-    const binaryFromAsmResult = fp.binaryArrayFromCompiledAsm(listingFile, allocator) catch |err| {
+    const binary_from_asm_result = fp.binary_array_from_compiled_asm(listing_file, allocator) catch |err| {
         try stderr.print("Could not get binary from compiled asm.", .{});
         return err;
     };
 
-    defer allocator.free(binaryFromAsmResult);
+    defer allocator.free(binary_from_asm_result);
 
-    try stdout.print("Binary from file:\n{b}\n\n", .{binaryFromAsmResult});
+    var binary_pointer: u8 = 0;
 
-    try stdout.print("Instructions:\n\nbits 16\n\n", .{});
-    for (0..binaryFromAsmResult.len - 1) |i| {
-        const instruction = try ds.instructionFromBinaryOpcodeArray(allocator, binaryFromAsmResult[i .. i + 2]);
+    try stdout.print("bits 16\n\n", .{});
+
+    for (0..binary_from_asm_result.len - 1) |_| {
+        if (binary_pointer >= binary_from_asm_result.len) {
+            try stdout.print("EOF reached.\n", .{});
+            break;
+        }
+
+        const bytes_needed_and_instruction_type = ds.get_bytes_needed_and_instruction_type(binary_from_asm_result[binary_pointer .. binary_pointer + 2]) catch |err| {
+            try stderr.print("Unhandled instruction encountered.\n", .{});
+            return err;
+        };
+
+        if (bytes_needed_and_instruction_type.bytes_needed == 0) {
+            try stdout.print("EOF reached.\n", .{});
+            break;
+        }
+
+        const instruction = try ds.parse_instruction(allocator, bytes_needed_and_instruction_type.instruction_type, binary_from_asm_result[binary_pointer .. binary_pointer + bytes_needed_and_instruction_type.bytes_needed]);
         try stdout.print("{s}", .{instruction});
         allocator.free(instruction);
+        binary_pointer += bytes_needed_and_instruction_type.bytes_needed;
     }
 }
