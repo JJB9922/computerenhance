@@ -33,11 +33,9 @@ pub fn main() !void {
 
     defer allocator.free(binary_from_asm_result);
 
-    try stdout.print("Binary from file:\n{b:0>8}\n\n", .{binary_from_asm_result});
-
     var binary_pointer: u8 = 0;
 
-    try stdout.print("Instructions:\n\nbits 16\n\n", .{});
+    try stdout.print("bits 16\n\n", .{});
 
     for (0..binary_from_asm_result.len - 1) |_| {
         if (binary_pointer >= binary_from_asm_result.len) {
