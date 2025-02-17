@@ -1,8 +1,9 @@
 const std = @import("std");
 
-const disassemblererror = error{unhandled_instruction};
+// Globally applicable
+const mod_mask = 0b11000000;
+const rm_mask = 0b00000111;
 
-// TODO: Fix awful naming
 const instructiontype = enum { none, mov_A, mov_B, mov_C, mov_D, mov_E, mov_G, mov_F };
 
 fn get_effective_address(allocator: std.mem.Allocator, mod: []const u8, rm: []const u8, instruction: []u8) ![]const u8 {
@@ -43,10 +44,10 @@ fn get_effective_address(allocator: std.mem.Allocator, mod: []const u8, rm: []co
         }
     }
 
-    return "";
+    return error.CannotGetEffectiveAddress;
 }
 
-fn reg_from_instruction(instruction: u8) []const u8 {
+fn reg_from_instruction(instruction: u8) ![]const u8 {
     const reg_mask = 0b00111000;
 
     if (instruction & reg_mask == 0b00000000) {
@@ -81,12 +82,10 @@ fn reg_from_instruction(instruction: u8) []const u8 {
         return "111";
     }
 
-    return "";
+    return error.CannotGetREG;
 }
 
-fn rm_from_instruction(instruction: u8) []const u8 {
-    const rm_mask = 0b00000111;
-
+fn rm_from_instruction(instruction: u8) ![]const u8 {
     if (instruction & rm_mask == 0b00000000) {
         return "000";
     }
@@ -119,12 +118,10 @@ fn rm_from_instruction(instruction: u8) []const u8 {
         return "111";
     }
 
-    return "";
+    return error.CannotGetRM;
 }
 
-fn mod_from_instruction(instruction: u8) []const u8 {
-    const mod_mask = 0b11000000;
-
+fn mod_from_instruction(instruction: u8) ![]const u8 {
     if (instruction & mod_mask == 0b00000000) {
         return "00";
     }
@@ -141,7 +138,7 @@ fn mod_from_instruction(instruction: u8) []const u8 {
         return "11";
     }
 
-    return "";
+    return error.CannotGetMOD;
 }
 
 fn get_single_register(register: []const u8, is_word_mode: bool) ![]const u8 {
@@ -185,9 +182,9 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
                 is_word_mode = true;
             }
 
-            const mod = mod_from_instruction(instruction[1]);
-            const rm = rm_from_instruction(instruction[1]);
-            const reg = reg_from_instruction(instruction[1]);
+            const mod = try mod_from_instruction(instruction[1]);
+            const rm = try rm_from_instruction(instruction[1]);
+            const reg = try reg_from_instruction(instruction[1]);
 
             std.debug.assert(!std.mem.eql(u8, mod, ""));
             std.debug.assert(!std.mem.eql(u8, rm, ""));
@@ -222,7 +219,7 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
                 is_word_mode = true;
             }
 
-            const reg = rm_from_instruction(instruction[0]);
+            const reg = try rm_from_instruction(instruction[0]);
             const dest_reg = try get_single_register(reg, is_word_mode);
 
             if (is_word_mode) {
@@ -234,20 +231,15 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instruc
             }
         },
         else => {
-            return "";
+            return error.UnhandledInstruction;
         },
     }
 
-    return "";
+    return error.ParseError;
 }
 
 // Can always figure out needed bytes for opcode from first couple bytes of the opcode
 pub fn get_bytes_needed_and_instruction_type(instruction: []u8) !struct { bytes_needed: u8, instruction_type: instructiontype } {
-    // MOV
-    const mod_mask = 0b11000000;
-    const rm_mask = 0b00000111;
-
-    // TODO: Replace mod calcs with helper function
     if ((instruction[0] & 0b11111100) == 0b10001000) {
         // 00 or 11
         if ((instruction[1] & mod_mask == 0b00000000 and instruction[1] & rm_mask == 0b00000110) or instruction[1] & mod_mask == 0b10000000) {
@@ -310,6 +302,6 @@ pub fn get_bytes_needed_and_instruction_type(instruction: []u8) !struct { bytes_
     if (instruction[0] & 0b11111111 == 0b00000000) {
         return .{ .bytes_needed = 0, .instruction_type = instructiontype.none };
     } else {
-        return disassemblererror.unhandled_instruction;
+        return error.UnhandledInstruction;
     }
 }

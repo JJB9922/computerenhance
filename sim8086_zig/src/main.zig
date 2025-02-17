@@ -30,13 +30,11 @@ pub fn main() !void {
         try stderr.print("Could not get binary from compiled asm.", .{});
         return err;
     };
-
     defer allocator.free(binary_from_asm_result);
-
-    var binary_pointer: u8 = 0;
 
     try stdout.print("bits 16\n\n", .{});
 
+    var binary_pointer: u8 = 0;
     for (0..binary_from_asm_result.len - 1) |_| {
         if (binary_pointer >= binary_from_asm_result.len) {
             try stdout.print("EOF reached.\n", .{});
@@ -53,8 +51,14 @@ pub fn main() !void {
             break;
         }
 
-        const instruction = try ds.parse_instruction(allocator, bytes_needed_and_instruction_type.instruction_type, binary_from_asm_result[binary_pointer .. binary_pointer + bytes_needed_and_instruction_type.bytes_needed]);
+        const instruction = ds.parse_instruction(allocator, bytes_needed_and_instruction_type.instruction_type, binary_from_asm_result[binary_pointer .. binary_pointer + bytes_needed_and_instruction_type.bytes_needed]) catch |err| {
+            try stdout.print("Could not parse instruction.\n", .{});
+            return err;
+        };
+
         try stdout.print("{s}", .{instruction});
+
+        // Print > Discard
         allocator.free(instruction);
         binary_pointer += bytes_needed_and_instruction_type.bytes_needed;
     }
