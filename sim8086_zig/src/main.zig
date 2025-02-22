@@ -34,7 +34,7 @@ pub fn main() !void {
 
     try stdout.print("bits 16\n\n", .{});
 
-    var binary_pointer: u8 = 0;
+    var binary_pointer: u16 = 0;
     for (0..binary_from_asm_result.len - 1) |_| {
         if (binary_pointer >= binary_from_asm_result.len) {
             try stdout.print("EOF reached.\n", .{});
@@ -55,6 +55,7 @@ pub fn main() !void {
 
         instruction_format.instruction =
             binary_from_asm_result[binary_pointer .. binary_pointer + instruction_format.bytes_needed];
+        instruction_format.address = binary_pointer;
 
         const instruction = ds.parse_instruction(allocator, instruction_format) catch |err| {
             try stdout.print("Could not parse instruction.\n", .{});
