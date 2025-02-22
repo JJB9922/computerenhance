@@ -88,7 +88,20 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_format: Instr
 
             return try std.fmt.allocPrint(allocator, "{s} {s}, {d}\n", .{ operation, dest_reg, source_val });
         },
-        OpcodePattern.imm_reg => {},
+        OpcodePattern.imm_reg => {
+            var dest_reg: []const u8 = "???";
+
+            // TODO: verify this is a correct guess and not an incorrect guess
+            if (instruction_format.instruction.len == 3) {
+                dest_reg = "ax";
+            } else {
+                dest_reg = "al";
+            }
+
+            const source_val = try get_data_value(instruction_format);
+
+            return try std.fmt.allocPrint(allocator, "{s} {s}, {d}\n", .{ operation, dest_reg, source_val });
+        },
         OpcodePattern.mem_acc => {},
         OpcodePattern.acc_mem => {},
         OpcodePattern.single_op => {},
@@ -114,10 +127,13 @@ pub fn get_instruction_format(instruction: []u8) !InstructionFormat {
     const reg_mem_reg_mask = 0b11111100;
     const imm_reg_mem_mask = 0b11111110;
     const imm_reg_mem_mask_arithmetic = 0b11111100;
+    const imm_reg_mask_mov = 0b11110000;
+    const imm_reg_mask_arithmetic = 0b11111110;
 
     const arithmetic_identifier_mask = 0b00111000;
 
     const sw_mask = 0b00000011;
+    const w_mask = 0b00000001;
 
     // reg_mem_reg
     if (opcode & reg_mem_reg_mask == 0b10001000) {
@@ -201,6 +217,41 @@ pub fn get_instruction_format(instruction: []u8) !InstructionFormat {
         }
     }
 
+    // imm_reg
+    if (opcode & imm_reg_mask_mov == 0b10110000) {
+        instruction_type = InstructionType.mov;
+        opcode_pattern = OpcodePattern.imm_reg;
+
+        if (opcode & 0b00001000 == 0b00001000) {
+            bytes_needed = 3;
+        } else {
+            bytes_needed = 2;
+        }
+    }
+
+    if (opcode & imm_reg_mask_arithmetic == 0b00000100) {
+        instruction_type = InstructionType.add;
+        opcode_pattern = OpcodePattern.imm_reg;
+    }
+
+    if (opcode & imm_reg_mask_arithmetic == 0b00101100) {
+        instruction_type = InstructionType.sub;
+        opcode_pattern = OpcodePattern.imm_reg;
+    }
+
+    if (opcode & imm_reg_mask_arithmetic == 0b00111100) {
+        instruction_type = InstructionType.cmp;
+        opcode_pattern = OpcodePattern.imm_reg;
+    }
+
+    if (opcode_pattern == OpcodePattern.imm_reg) {
+        if (instruction_type != InstructionType.mov and opcode & w_mask == 0b00000001) {
+            bytes_needed = 3;
+        } else {
+            bytes_needed = 2;
+        }
+    }
+
     if (bytes_needed > 0) {
         return InstructionFormat{ .bytes_needed = bytes_needed, .instruction_type = instruction_type, .opcode_pattern = opcode_pattern, .instruction = "" };
     } else if (instruction[0] & 0b11111111 == 0b00000000) {
@@ -219,6 +270,17 @@ fn get_data_value(instruction_format: InstructionFormat) !i32 {
             return @as(u16, sixteen_bit_result);
         } else {
             return @as(u16, instruction_format.instruction[instruction_format.instruction.len - 1]);
+        }
+    }
+
+    if (instruction_format.opcode_pattern == OpcodePattern.imm_reg) {
+        const is_word = instruction_format.instruction[0] & 0b00000001 == 0b00000001;
+
+        if (is_word) {
+            const sixteen_bit_result: i16 = @as(i16, instruction_format.instruction[instruction_format.instruction.len - 1]) << 8 | @as(i16, instruction_format.instruction[instruction_format.instruction.len - 2]);
+            return @as(i16, sixteen_bit_result);
+        } else {
+            return @as(i16, instruction_format.instruction[instruction_format.instruction.len - 1]);
         }
     }
 

@@ -41,6 +41,8 @@ pub fn main() !void {
             break;
         }
 
+        try stdout.print("{b:0>8} ", .{binary_from_asm_result[binary_pointer .. binary_pointer + 2]});
+
         var instruction_format = ds.get_instruction_format(binary_from_asm_result[binary_pointer .. binary_pointer + 2]) catch |err| {
             try stderr.print("Unhandled instruction encountered.\n", .{});
             return err;
