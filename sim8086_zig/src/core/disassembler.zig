@@ -86,7 +86,8 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_format: Instr
 
             if (std.mem.eql(u8, mod, "00")) {
                 if (std.mem.eql(u8, rm, "110")) {
-                    const addr = try std.fmt.allocPrint(allocator, "0x{x}", .{instruction_format.address});
+                    const displacement = @as(u16, instruction_format.instruction[2]) | (@as(u16, instruction_format.instruction[3]) << 8);
+                    const addr = try std.fmt.allocPrint(allocator, "[{d}]", .{displacement});
                     dest_reg = addr;
                 } else {
                     dest_reg = try get_effective_address(allocator, mod, rm, instruction_format.instruction);
@@ -413,9 +414,9 @@ pub fn get_instruction_format(instruction: []u8) !InstructionFormat {
 
 fn get_data_value(instruction_format: InstructionFormat) !i32 {
     if (instruction_format.opcode_pattern == OpcodePattern.imm_reg_mem) {
-        const is_signed_word = instruction_format.instruction[0] & 0b00000001 == 0b00000001;
+        const is_signed_word = instruction_format.instruction[0] & 0b00000011 == 0b00000001;
 
-        if (!is_signed_word) {
+        if (is_signed_word) {
             const sixteen_bit_result: u16 = @as(u16, instruction_format.instruction[instruction_format.instruction.len - 1]) << 8 | @as(u16, instruction_format.instruction[instruction_format.instruction.len - 2]);
             return @as(u16, sixteen_bit_result);
         } else {
