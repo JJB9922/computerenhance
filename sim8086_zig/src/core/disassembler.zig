@@ -4,16 +4,444 @@ const std = @import("std");
 const mod_mask = 0b11000000;
 const rm_mask = 0b00000111;
 
-const instructiontype = enum { none, mov_A, mov_B, mov_C, mov_D, mov_E, mov_G, mov_F };
+const InstructionType = enum { none, mov, add, sub, cmp, jnz, je, jl, jle, jb, jbe, jp, jo, js, jne, jnl, jg, jnb, ja, jnp, jno, jns, loop, loopz, loopnz, jcxz };
+
+const OpcodePattern = enum {
+    none,
+    reg_mem_reg, // Register/memory to/from register
+    imm_reg_mem, // Immediate to register/memory
+    imm_reg, // Immediate to register
+    mem_acc, // Memory to accumulator
+    acc_mem, // Accumulator to memory
+    single_op, // Single operand
+    implicit, // No operands, implied
+    port_io, // Port I/O operations
+    seg_op, // Segment register operations
+    jump, // Conditional or unconditional jump with displacement
+};
+
+const InstructionFormat = struct { bytes_needed: u8, instruction_type: InstructionType, opcode_pattern: OpcodePattern, instruction: []u8, address: u16 };
+
+pub fn parse_instruction(allocator: std.mem.Allocator, instruction_format: InstructionFormat) ![]const u8 {
+    const operation = try instruction_string_from_instructiontype_enum(instruction_format.instruction_type);
+
+    // 8086 User Man. 4-22
+    switch (instruction_format.opcode_pattern) {
+        OpcodePattern.reg_mem_reg => {
+            std.debug.assert(instruction_format.instruction.len > 1 and instruction_format.instruction.len < 5);
+            const d_mask = 0b00000010;
+            const w_mask = 0b00000001;
+
+            const mod = try mod_from_instruction(instruction_format.instruction[1]);
+            const rm = try rm_from_instruction(instruction_format.instruction[1]);
+            const reg = try reg_from_instruction(instruction_format.instruction[1]);
+
+            var source_is_reg = false;
+            var is_word_mode = false;
+
+            if (instruction_format.instruction[0] & d_mask == d_mask) {
+                source_is_reg = true;
+            }
+
+            if (instruction_format.instruction[0] & w_mask == w_mask) {
+                is_word_mode = true;
+            }
+
+            var dest_reg: []const u8 = "???";
+            var source_reg: []const u8 = "???";
+
+            if (source_is_reg) {
+                dest_reg = try get_single_register(reg, is_word_mode);
+                if (!std.mem.eql(u8, mod, "11")) {
+                    source_reg = try get_effective_address(allocator, mod, rm, instruction_format.instruction);
+                } else {
+                    source_reg = try get_single_register(rm, is_word_mode);
+                }
+            } else {
+                source_reg = try get_single_register(reg, is_word_mode);
+                if (!std.mem.eql(u8, mod, "11")) {
+                    dest_reg = try get_effective_address(allocator, mod, rm, instruction_format.instruction);
+                } else {
+                    dest_reg = try get_single_register(rm, is_word_mode);
+                }
+            }
+            if (source_is_reg) {}
+
+            return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ operation, dest_reg, source_reg });
+        },
+        OpcodePattern.imm_reg_mem => {
+            std.debug.assert(instruction_format.instruction.len > 1 and instruction_format.instruction.len < 6);
+            const w_mask = 0b00000001;
+            var is_word_mode = false;
+
+            if (instruction_format.instruction[0] & w_mask == w_mask) {
+                is_word_mode = true;
+            }
+
+            var source_val: i32 = 0;
+            var dest_reg: []const u8 = "???";
+
+            const mod = try mod_from_instruction(instruction_format.instruction[1]);
+            const rm = try rm_from_instruction(instruction_format.instruction[1]);
+
+            if (std.mem.eql(u8, mod, "00")) {
+                if (std.mem.eql(u8, rm, "110")) {
+                    const displacement = @as(u16, instruction_format.instruction[2]) | (@as(u16, instruction_format.instruction[3]) << 8);
+                    const addr = try std.fmt.allocPrint(allocator, "[{d}]", .{displacement});
+                    dest_reg = addr;
+                } else {
+                    dest_reg = try get_effective_address(allocator, mod, rm, instruction_format.instruction);
+                }
+            }
+
+            if (std.mem.eql(u8, mod, "01")) {
+                dest_reg = try get_effective_address(allocator, mod, rm, instruction_format.instruction);
+            }
+
+            if (std.mem.eql(u8, mod, "10")) {
+                dest_reg = try get_effective_address(allocator, mod, rm, instruction_format.instruction);
+            }
+
+            if (std.mem.eql(u8, mod, "11")) {
+                dest_reg = try get_single_register(rm, is_word_mode);
+            }
+
+            source_val = try get_data_value(instruction_format);
+
+            return try std.fmt.allocPrint(allocator, "{s} {s}, {d}\n", .{ operation, dest_reg, source_val });
+        },
+        OpcodePattern.imm_reg => {
+            var dest_reg: []const u8 = "???";
+
+            // TODO: verify this is a correct guess and not an incorrect guess
+            if (instruction_format.instruction.len == 3) {
+                dest_reg = "ax";
+            } else {
+                dest_reg = "al";
+            }
+
+            const source_val = try get_data_value(instruction_format);
+
+            return try std.fmt.allocPrint(allocator, "{s} {s}, {d}\n", .{ operation, dest_reg, source_val });
+        },
+        OpcodePattern.mem_acc => {},
+        OpcodePattern.acc_mem => {},
+        OpcodePattern.single_op => {},
+        OpcodePattern.implicit => {},
+        OpcodePattern.port_io => {},
+        OpcodePattern.seg_op => {},
+        OpcodePattern.jump => {
+            const displacement: u16 = instruction_format.instruction[1];
+
+            const target_address = instruction_format.address + @as(u16, @intCast(instruction_format.instruction.len)) + displacement;
+            return try std.fmt.allocPrint(allocator, "{s} 0x{x}\n", .{ operation, target_address });
+        },
+        else => {
+            return error.UnhandledInstruction;
+        },
+    }
+
+    return error.ParseError;
+}
+
+// Can always figure out needed bytes for opcode from first couple bytes of the opcode
+pub fn get_instruction_format(instruction: []u8) !InstructionFormat {
+    var bytes_needed: u8 = 0;
+    var instruction_type: InstructionType = InstructionType.none;
+    var opcode_pattern: OpcodePattern = OpcodePattern.none;
+    const opcode = instruction[0];
+    const opcode_byte_2 = instruction[1];
+
+    const reg_mem_reg_mask = 0b11111100;
+    const imm_reg_mem_mask = 0b11111110;
+    const imm_reg_mem_mask_arithmetic = 0b11111100;
+    const imm_reg_mask_mov = 0b11110000;
+    const imm_reg_mask_arithmetic = 0b11111110;
+
+    const arithmetic_identifier_mask = 0b00111000;
+
+    const sw_mask = 0b00000011;
+    const w_mask = 0b00000001;
+
+    const full_opcode_mask = 0b11111111;
+
+    // reg_mem_reg
+    if (opcode & reg_mem_reg_mask == 0b10001000) {
+        instruction_type = InstructionType.mov;
+        opcode_pattern = OpcodePattern.reg_mem_reg;
+    }
+
+    if (opcode & reg_mem_reg_mask == 0b00000000) {
+        instruction_type = InstructionType.add;
+        opcode_pattern = OpcodePattern.reg_mem_reg;
+    }
+
+    if (opcode & reg_mem_reg_mask == 0b00101000) {
+        instruction_type = InstructionType.sub;
+        opcode_pattern = OpcodePattern.reg_mem_reg;
+    }
+
+    if (opcode & reg_mem_reg_mask == 0b00111000) {
+        instruction_type = InstructionType.cmp;
+        opcode_pattern = OpcodePattern.reg_mem_reg;
+    }
+
+    if (opcode_pattern == OpcodePattern.reg_mem_reg) {
+        if ((opcode_byte_2 & mod_mask == 0b00000000 and opcode_byte_2 & rm_mask == 0b00000110) or opcode_byte_2 & mod_mask == 0b10000000) {
+            bytes_needed = 4;
+        }
+
+        if ((opcode_byte_2 & mod_mask == 0b00000000 and opcode_byte_2 & rm_mask != 0b00000110) or opcode_byte_2 & mod_mask == 0b11000000) {
+            bytes_needed = 2;
+        }
+
+        if (opcode_byte_2 & mod_mask == 0b01000000) {
+            bytes_needed = 3;
+        }
+    }
+
+    // imm_reg_mem
+    if (opcode & imm_reg_mem_mask == 0b1100011) {
+        instruction_type = InstructionType.mov;
+        opcode_pattern = OpcodePattern.imm_reg_mem;
+    }
+
+    if (opcode & imm_reg_mem_mask_arithmetic == 0b10000000 and opcode_byte_2 & arithmetic_identifier_mask == 0b00000000) {
+        instruction_type = InstructionType.add;
+        opcode_pattern = OpcodePattern.imm_reg_mem;
+    }
+
+    if (opcode & imm_reg_mem_mask_arithmetic == 0b10000000 and opcode_byte_2 & arithmetic_identifier_mask == 0b00101000) {
+        instruction_type = InstructionType.sub;
+        opcode_pattern = OpcodePattern.imm_reg_mem;
+    }
+
+    if (opcode & imm_reg_mem_mask_arithmetic == 0b10000000 and opcode_byte_2 & arithmetic_identifier_mask == 0b00111000) {
+        instruction_type = InstructionType.cmp;
+        opcode_pattern = OpcodePattern.imm_reg_mem;
+    }
+
+    if (opcode_pattern == OpcodePattern.imm_reg_mem) {
+        if ((opcode_byte_2 & mod_mask == 0b00000000 and opcode_byte_2 & rm_mask == 0b00000110) or opcode_byte_2 & mod_mask == 0b10000000) {
+            if (opcode & sw_mask == 0b00000001) {
+                bytes_needed = 6;
+            } else {
+                bytes_needed = 5;
+            }
+        }
+
+        if ((opcode_byte_2 & mod_mask == 0b00000000 and opcode_byte_2 & rm_mask != 0b00000110) or opcode_byte_2 & mod_mask == 0b11000000) {
+            if (opcode & sw_mask == 0b00000001) {
+                bytes_needed = 4;
+            } else {
+                bytes_needed = 3;
+            }
+        }
+
+        if (opcode_byte_2 & mod_mask == 0b01000000) {
+            if (opcode & sw_mask == 0b00000001) {
+                bytes_needed = 5;
+            } else {
+                bytes_needed = 4;
+            }
+        }
+    }
+
+    // imm_reg
+    if (opcode & imm_reg_mask_mov == 0b10110000) {
+        instruction_type = InstructionType.mov;
+        opcode_pattern = OpcodePattern.imm_reg;
+
+        if (opcode & 0b00001000 == 0b00001000) {
+            bytes_needed = 3;
+        } else {
+            bytes_needed = 2;
+        }
+    }
+
+    if (opcode & imm_reg_mask_arithmetic == 0b00000100) {
+        instruction_type = InstructionType.add;
+        opcode_pattern = OpcodePattern.imm_reg;
+    }
+
+    if (opcode & imm_reg_mask_arithmetic == 0b00101100) {
+        instruction_type = InstructionType.sub;
+        opcode_pattern = OpcodePattern.imm_reg;
+    }
+
+    if (opcode & imm_reg_mask_arithmetic == 0b00111100) {
+        instruction_type = InstructionType.cmp;
+        opcode_pattern = OpcodePattern.imm_reg;
+    }
+
+    if (opcode_pattern == OpcodePattern.imm_reg) {
+        if (instruction_type != InstructionType.mov and opcode & w_mask == 0b00000001) {
+            bytes_needed = 3;
+        } else {
+            bytes_needed = 2;
+        }
+    }
+
+    // jumps
+    if (opcode & full_opcode_mask == 0b01110101) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jnz;
+    }
+
+    if (opcode & full_opcode_mask == 0b01110100) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.je;
+    }
+
+    if (opcode & full_opcode_mask == 0b01111100) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jl;
+    }
+
+    if (opcode & full_opcode_mask == 0b01111110) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jle;
+    }
+
+    if (opcode & full_opcode_mask == 0b01110010) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jb;
+    }
+
+    if (opcode & full_opcode_mask == 0b01110110) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jbe;
+    }
+
+    if (opcode & full_opcode_mask == 0b01111010) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jp;
+    }
+
+    if (opcode & full_opcode_mask == 0b01110000) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jo;
+    }
+
+    if (opcode & full_opcode_mask == 0b01111000) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.js;
+    }
+
+    if (opcode & full_opcode_mask == 0b01111101) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jnl;
+    }
+
+    if (opcode & full_opcode_mask == 0b01111111) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jg;
+    }
+
+    if (opcode & full_opcode_mask == 0b01110011) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jnb;
+    }
+
+    if (opcode & full_opcode_mask == 0b01110111) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.ja;
+    }
+
+    if (opcode & full_opcode_mask == 0b01111011) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jnp;
+    }
+
+    if (opcode & full_opcode_mask == 0b01110001) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jno;
+    }
+
+    if (opcode & full_opcode_mask == 0b01111001) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jns;
+    }
+
+    if (opcode & full_opcode_mask == 0b11100010) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.loop;
+    }
+
+    if (opcode & full_opcode_mask == 0b11100001) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.loopz;
+    }
+
+    if (opcode & full_opcode_mask == 0b11100000) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.loopnz;
+    }
+
+    if (opcode & full_opcode_mask == 0b11100011) {
+        opcode_pattern = OpcodePattern.jump;
+        bytes_needed = 2;
+        instruction_type = InstructionType.jcxz;
+    }
+
+    if (bytes_needed > 0) {
+        return InstructionFormat{ .bytes_needed = bytes_needed, .instruction_type = instruction_type, .opcode_pattern = opcode_pattern, .instruction = "", .address = 0 };
+    } else if (instruction[0] & 0b11111111 == 0b00000000) {
+        return .{ .bytes_needed = 0, .opcode_pattern = OpcodePattern.none, .instruction_type = InstructionType.none, .instruction = "", .address = 0 };
+    } else {
+        return error.UnhandledInstruction;
+    }
+}
+
+fn get_data_value(instruction_format: InstructionFormat) !i32 {
+    if (instruction_format.opcode_pattern == OpcodePattern.imm_reg_mem) {
+        const is_signed_word = instruction_format.instruction[0] & 0b00000011 == 0b00000001;
+
+        if (is_signed_word) {
+            const sixteen_bit_result: u16 = @as(u16, instruction_format.instruction[instruction_format.instruction.len - 1]) << 8 | @as(u16, instruction_format.instruction[instruction_format.instruction.len - 2]);
+            return @as(u16, sixteen_bit_result);
+        } else {
+            return @as(u16, instruction_format.instruction[instruction_format.instruction.len - 1]);
+        }
+    }
+
+    if (instruction_format.opcode_pattern == OpcodePattern.imm_reg) {
+        const is_word = instruction_format.instruction[0] & 0b00000001 == 0b00000001;
+
+        if (is_word) {
+            const sixteen_bit_result: i16 = @as(i16, instruction_format.instruction[instruction_format.instruction.len - 1]) << 8 | @as(i16, instruction_format.instruction[instruction_format.instruction.len - 2]);
+            return @as(i16, sixteen_bit_result);
+        } else {
+            return @as(i8, @bitCast(instruction_format.instruction[instruction_format.instruction.len - 1]));
+        }
+    }
+
+    return error.UnhandledDataValueFormat;
+}
 
 fn get_effective_address(allocator: std.mem.Allocator, mod: []const u8, rm: []const u8, instruction: []u8) ![]const u8 {
     if (std.mem.eql(u8, mod, "00")) {
         if (std.mem.eql(u8, rm, "000")) {
             return "[bx + si]";
-        }
-
-        if (std.mem.eql(u8, rm, "011")) {
-            return "[bp + di]";
         }
 
         if (std.mem.eql(u8, rm, "001")) {
@@ -23,16 +451,61 @@ fn get_effective_address(allocator: std.mem.Allocator, mod: []const u8, rm: []co
         if (std.mem.eql(u8, rm, "010")) {
             return "[bp + si]";
         }
+
+        if (std.mem.eql(u8, rm, "011")) {
+            return "[bp + di]";
+        }
+
+        if (std.mem.eql(u8, rm, "100")) {
+            return "[si]";
+        }
+
+        if (std.mem.eql(u8, rm, "101")) {
+            return "[di]";
+        }
+
+        if (std.mem.eql(u8, rm, "110")) {
+            return "???";
+        }
+
+        if (std.mem.eql(u8, rm, "111")) {
+            return "[bx]";
+        }
     }
 
     if (std.mem.eql(u8, mod, "01")) {
-        if (std.mem.eql(u8, rm, "110")) {
-            return "[bp]";
-        }
+        const value = @as(i32, instruction[2]);
 
         if (std.mem.eql(u8, rm, "000")) {
-            const result = try std.fmt.allocPrint(allocator, "[bx + si + {d}]", .{instruction[2]});
-            return result;
+            return try std.fmt.allocPrint(allocator, "[bx + si + {d}]", .{value});
+        }
+
+        if (std.mem.eql(u8, rm, "001")) {
+            return try std.fmt.allocPrint(allocator, "[bx + di + {d}]", .{value});
+        }
+
+        if (std.mem.eql(u8, rm, "010")) {
+            return try std.fmt.allocPrint(allocator, "[bp + si + {d}]", .{value});
+        }
+
+        if (std.mem.eql(u8, rm, "011")) {
+            return try std.fmt.allocPrint(allocator, "[bp + di + {d}]", .{value});
+        }
+
+        if (std.mem.eql(u8, rm, "100")) {
+            return try std.fmt.allocPrint(allocator, "[si + {d}]", .{value});
+        }
+
+        if (std.mem.eql(u8, rm, "101")) {
+            return try std.fmt.allocPrint(allocator, "[di + {d}]", .{value});
+        }
+
+        if (std.mem.eql(u8, rm, "110")) {
+            return try std.fmt.allocPrint(allocator, "[bp + {d}]", .{value});
+        }
+
+        if (std.mem.eql(u8, rm, "111")) {
+            return try std.fmt.allocPrint(allocator, "[bx + {d}]", .{value});
         }
     }
 
@@ -40,6 +513,48 @@ fn get_effective_address(allocator: std.mem.Allocator, mod: []const u8, rm: []co
         if (std.mem.eql(u8, rm, "000")) {
             const sixteen_bit_result: i16 = @as(i16, instruction[3]) << 8 | @as(i16, instruction[2]);
             const result = try std.fmt.allocPrint(allocator, "[bx + si + {d}]", .{sixteen_bit_result});
+            return result;
+        }
+
+        if (std.mem.eql(u8, rm, "001")) {
+            const sixteen_bit_result: i16 = @as(i16, instruction[3]) << 8 | @as(i16, instruction[2]);
+            const result = try std.fmt.allocPrint(allocator, "[bx + di + {d}]", .{sixteen_bit_result});
+            return result;
+        }
+
+        if (std.mem.eql(u8, rm, "010")) {
+            const sixteen_bit_result: i16 = @as(i16, instruction[3]) << 8 | @as(i16, instruction[2]);
+            const result = try std.fmt.allocPrint(allocator, "[bp + si + {d}]", .{sixteen_bit_result});
+            return result;
+        }
+
+        if (std.mem.eql(u8, rm, "011")) {
+            const sixteen_bit_result: i16 = @as(i16, instruction[3]) << 8 | @as(i16, instruction[2]);
+            const result = try std.fmt.allocPrint(allocator, "[bp + di + {d}]", .{sixteen_bit_result});
+            return result;
+        }
+
+        if (std.mem.eql(u8, rm, "100")) {
+            const sixteen_bit_result: i16 = @as(i16, instruction[3]) << 8 | @as(i16, instruction[2]);
+            const result = try std.fmt.allocPrint(allocator, "[si + {d}]", .{sixteen_bit_result});
+            return result;
+        }
+
+        if (std.mem.eql(u8, rm, "101")) {
+            const sixteen_bit_result: i16 = @as(i16, instruction[3]) << 8 | @as(i16, instruction[2]);
+            const result = try std.fmt.allocPrint(allocator, "[di + {d}]", .{sixteen_bit_result});
+            return result;
+        }
+
+        if (std.mem.eql(u8, rm, "110")) {
+            const sixteen_bit_result: i16 = @as(i16, instruction[3]) << 8 | @as(i16, instruction[2]);
+            const result = try std.fmt.allocPrint(allocator, "[bp + {d}]", .{sixteen_bit_result});
+            return result;
+        }
+
+        if (std.mem.eql(u8, rm, "111")) {
+            const sixteen_bit_result: i16 = @as(i16, instruction[3]) << 8 | @as(i16, instruction[2]);
+            const result = try std.fmt.allocPrint(allocator, "[bx + {d}]", .{sixteen_bit_result});
             return result;
         }
     }
@@ -166,142 +681,33 @@ fn get_single_register(register: []const u8, is_word_mode: bool) ![]const u8 {
     }
 }
 
-pub fn parse_instruction(allocator: std.mem.Allocator, instruction_type: instructiontype, instruction: []u8) ![]const u8 {
-    var instruction_source_is_reg = false;
-    var is_word_mode: bool = false;
-
-    // 8086 User Man. 4-22
+fn instruction_string_from_instructiontype_enum(instruction_type: InstructionType) ![]const u8 {
     switch (instruction_type) {
-        instructiontype.mov_A => {
-            std.debug.assert(instruction.len > 1 and instruction.len < 5);
-
-            if (instruction[0] & 0b00000010 == 0b00000010) {
-                instruction_source_is_reg = true;
-            }
-            if (instruction[0] & 0b00000001 == 0b00000001) {
-                is_word_mode = true;
-            }
-
-            const mod = try mod_from_instruction(instruction[1]);
-            const rm = try rm_from_instruction(instruction[1]);
-            const reg = try reg_from_instruction(instruction[1]);
-
-            std.debug.assert(!std.mem.eql(u8, mod, ""));
-            std.debug.assert(!std.mem.eql(u8, rm, ""));
-            std.debug.assert(!std.mem.eql(u8, reg, ""));
-
-            var source_reg: []const u8 = "undefined";
-            var dest_reg: []const u8 = "undefined";
-
-            if (instruction_source_is_reg) {
-                dest_reg = try get_single_register(reg, is_word_mode);
-                if (!std.mem.eql(u8, mod, "11")) {
-                    source_reg = try get_effective_address(allocator, mod, rm, instruction);
-                } else {
-                    source_reg = try get_single_register(rm, is_word_mode);
-                }
-            } else {
-                source_reg = try get_single_register(reg, is_word_mode);
-                if (!std.mem.eql(u8, mod, "11")) {
-                    dest_reg = try get_effective_address(allocator, mod, rm, instruction);
-                } else {
-                    dest_reg = try get_single_register(rm, is_word_mode);
-                }
-            }
-
-            return try std.fmt.allocPrint(allocator, "{s} {s}, {s}\n", .{ "mov", dest_reg, source_reg });
-        },
-        instructiontype.mov_B => {},
-        instructiontype.mov_C => {
-            std.debug.assert(instruction.len > 1 and instruction.len < 4);
-
-            if (instruction.len == 3) {
-                is_word_mode = true;
-            }
-
-            const reg = try rm_from_instruction(instruction[0]);
-            const dest_reg = try get_single_register(reg, is_word_mode);
-
-            if (is_word_mode) {
-                const data: i16 = @as(i16, instruction[2]) << 8 | @as(i16, instruction[1]);
-                return try std.fmt.allocPrint(allocator, "{s} {s}, {d}\n", .{ "mov", dest_reg, data });
-            } else {
-                const data: i8 = @bitCast(instruction[1]);
-                return try std.fmt.allocPrint(allocator, "{s} {s}, {d}\n", .{ "mov", dest_reg, data });
-            }
-        },
-        else => {
-            return error.UnhandledInstruction;
-        },
-    }
-
-    return error.ParseError;
-}
-
-// Can always figure out needed bytes for opcode from first couple bytes of the opcode
-pub fn get_bytes_needed_and_instruction_type(instruction: []u8) !struct { bytes_needed: u8, instruction_type: instructiontype } {
-    if ((instruction[0] & 0b11111100) == 0b10001000) {
-        // 00 or 11
-        if ((instruction[1] & mod_mask == 0b00000000 and instruction[1] & rm_mask == 0b00000110) or instruction[1] & mod_mask == 0b10000000) {
-            return .{ .bytes_needed = 4, .instruction_type = instructiontype.mov_A };
-        }
-
-        // 01
-        if ((instruction[1] & mod_mask == 0b00000000 and instruction[1] & rm_mask != 0b00000110) or instruction[1] & mod_mask == 0b11000000) {
-            return .{ .bytes_needed = 2, .instruction_type = instructiontype.mov_A };
-        }
-
-        // 10
-        if (instruction[1] & mod_mask == 0b01000000) {
-            return .{ .bytes_needed = 3, .instruction_type = instructiontype.mov_A };
-        }
-    }
-
-    if (instruction[0] & 0b11111110 == 0b11000110) {
-        const w_mask = 0b00000001;
-        var is_word = false;
-        if (instruction[0] & w_mask == 0b00000001) {
-            is_word = true;
-        }
-
-        if ((instruction[1] & mod_mask == 0b00000000 and instruction[1] & rm_mask == 0b00000110) or instruction[1] & mod_mask == 0b10000000) {
-            if (is_word) {
-                return .{ .bytes_needed = 6, .instruction_type = instructiontype.mov_B };
-            } else {
-                return .{ .bytes_needed = 5, .instruction_type = instructiontype.mov_B };
-            }
-        }
-
-        if ((instruction[1] & mod_mask == 0b00000000 and instruction[1] & rm_mask != 0b00000110) or instruction[1] & mod_mask == 0b11000000) {
-            if (is_word) {
-                return .{ .bytes_needed = 4, .instruction_type = instructiontype.mov_B };
-            } else {
-                return .{ .bytes_needed = 3, .instruction_type = instructiontype.mov_B };
-            }
-        }
-
-        if (instruction[1] & mod_mask == 0b01000000) {
-            if (is_word) {
-                return .{ .bytes_needed = 5, .instruction_type = instructiontype.mov_B };
-            } else {
-                return .{ .bytes_needed = 4, .instruction_type = instructiontype.mov_B };
-            }
-        }
-    }
-
-    if (instruction[0] & 0b11110000 == 0b10110000) {
-        const w_mask = 0b00001000;
-
-        if (instruction[0] & w_mask == 0b00001000) {
-            return .{ .bytes_needed = 3, .instruction_type = instructiontype.mov_C };
-        } else {
-            return .{ .bytes_needed = 2, .instruction_type = instructiontype.mov_C };
-        }
-    }
-
-    if (instruction[0] & 0b11111111 == 0b00000000) {
-        return .{ .bytes_needed = 0, .instruction_type = instructiontype.none };
-    } else {
-        return error.UnhandledInstruction;
+        InstructionType.mov => return "mov",
+        InstructionType.add => return "add",
+        InstructionType.sub => return "sub",
+        InstructionType.cmp => return "cmp",
+        InstructionType.jnz => return "jnz",
+        InstructionType.je => return "je",
+        InstructionType.jl => return "jl",
+        InstructionType.jle => return "jle",
+        InstructionType.jb => return "jb",
+        InstructionType.jbe => return "jbe",
+        InstructionType.jp => return "jp",
+        InstructionType.jo => return "jo",
+        InstructionType.js => return "js",
+        InstructionType.jne => return "jne",
+        InstructionType.jnl => return "jnl",
+        InstructionType.jg => return "jg",
+        InstructionType.jnb => return "jnb",
+        InstructionType.ja => return "ja",
+        InstructionType.jnp => return "jnp",
+        InstructionType.jno => return "jno",
+        InstructionType.jns => return "jns",
+        InstructionType.loop => return "loop",
+        InstructionType.loopz => return "loopz",
+        InstructionType.loopnz => return "loopnz",
+        InstructionType.jcxz => return "jcxz",
+        else => return "???",
     }
 }
