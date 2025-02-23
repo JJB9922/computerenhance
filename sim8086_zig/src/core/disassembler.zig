@@ -84,14 +84,28 @@ pub fn parse_instruction(allocator: std.mem.Allocator, instruction_format: Instr
             const mod = try mod_from_instruction(instruction_format.instruction[1]);
             const rm = try rm_from_instruction(instruction_format.instruction[1]);
 
-            source_val = try get_data_value(instruction_format);
-
-            if (std.mem.eql(u8, mod, "00") or std.mem.eql(u8, mod, "11")) {
-                dest_reg = try get_single_register(rm, is_word_mode);
-                source_val = 0;
+            if (std.mem.eql(u8, mod, "00")) {
+                if (std.mem.eql(u8, rm, "110")) {
+                    const addr = try std.fmt.allocPrint(allocator, "0x{x}", .{instruction_format.address});
+                    dest_reg = addr;
+                } else {
+                    dest_reg = try get_effective_address(allocator, mod, rm, instruction_format.instruction);
+                }
             }
-            if (std.mem.eql(u8, mod, "01")) {}
-            if (std.mem.eql(u8, mod, "10")) {}
+
+            if (std.mem.eql(u8, mod, "01")) {
+                dest_reg = try get_effective_address(allocator, mod, rm, instruction_format.instruction);
+            }
+
+            if (std.mem.eql(u8, mod, "10")) {
+                dest_reg = try get_effective_address(allocator, mod, rm, instruction_format.instruction);
+            }
+
+            if (std.mem.eql(u8, mod, "11")) {
+                dest_reg = try get_single_register(rm, is_word_mode);
+            }
+
+            source_val = try get_data_value(instruction_format);
 
             return try std.fmt.allocPrint(allocator, "{s} {s}, {d}\n", .{ operation, dest_reg, source_val });
         },
