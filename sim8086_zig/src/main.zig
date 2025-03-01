@@ -51,6 +51,7 @@ pub fn main() !void {
         try stdout.print("{b:0>8} - ", .{immediate});
 
         const instruction_ctx = try d.instruction_ctx_from_immediate(immediate);
+        try stdout.print("size: {d}\n", .{instruction_ctx.size});
 
         const instruction = try d.parse_instruction_to_string(allocator, binary_from_compiled_asm[binary_pointer .. binary_pointer + instruction_ctx.size], instruction_ctx);
         try stdout.print("{s}\n", .{instruction});
