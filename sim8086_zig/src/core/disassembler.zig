@@ -31,6 +31,13 @@ pub fn instruction_ctx_from_immediate(immediate: []u8) !is.instruction {
             if (instruction.data_if_w == true) {
                 instruction.size += 1;
             }
+
+            if (instruction.data_if_sw == true) {
+                const s = extract_field(immediate, instruction.s_loc.?);
+                if (s == 0) {
+                    instruction.size += 1;
+                }
+            }
         }
     }
 
@@ -47,6 +54,7 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
     var reg: []const u8 = "";
     var rm: []const u8 = "";
     var d: u8 = 0;
+    var mut_instruction = instruction;
 
     if (instruction.mod_loc != null) {
         mod = extract_field(binary, instruction.mod_loc.?);
@@ -78,13 +86,27 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
         }
     }
 
-    if (instruction.data_low_loc != null) {
+    if (mut_instruction.data_low_loc != null) {
+        if (mut_instruction.disp_low_loc != null) {
+            switch (mod) {
+                0b00, 0b11 => {
+                    mut_instruction.data_low_loc.?.byte_index -= 2;
+                    mut_instruction.data_high_loc.?.byte_index -= 2;
+                },
+                0b01 => {
+                    mut_instruction.disp_low_loc.?.byte_index -= 1;
+                    mut_instruction.data_high_loc.?.byte_index -= 1;
+                },
+                else => {},
+            }
+        }
+
         var imm_data: i16 = 0;
-        const lowData = extract_field(binary, instruction.data_low_loc.?);
+        const lowData = extract_field(binary, mut_instruction.data_low_loc.?);
         imm_data = @as(i8, @bitCast(lowData));
 
-        if (instruction.data_if_w.? and instruction.w_on.? and instruction.data_high_loc != null) {
-            const highData = extract_field(binary, instruction.data_high_loc.?);
+        if (mut_instruction.data_if_w.? and mut_instruction.w_on.? and mut_instruction.data_high_loc != null) {
+            const highData = extract_field(binary, mut_instruction.data_high_loc.?);
 
             imm_data = @as(i16, highData) << 8 | @as(i16, lowData);
         }

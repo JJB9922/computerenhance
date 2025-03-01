@@ -28,9 +28,11 @@ pub const instruction = struct {
     data_low_loc: ?FieldLoc = null,
     data_high_loc: ?FieldLoc = null,
     sr_loc: ?FieldLoc = null,
-
+    arithmetic_id_loc: ?FieldLoc = null,
     data_if_w: ?bool = false,
+    data_if_sw: ?bool = false,
     w_on: ?bool = false,
+    is_arithmetic: ?bool = false,
 };
 
 pub const instructions = [_]instruction{
@@ -83,6 +85,21 @@ pub const instructions = [_]instruction{
         .rm_loc = .{ .byte_index = 1, .bit_mask = 0b00000111, .bit_start = 0 },
         .disp_low_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
         .disp_high_loc = .{ .byte_index = 3, .bit_mask = 0b11111111 },
+    },
+
+    instruction{
+        .opcode_id = opcode.add,
+        .opcode_bits = 0b10000000,
+        .opcode_mask = 0b11111100,
+        .w_loc = .{ .byte_index = 0, .bit_mask = 0b00000001, .bit_start = 0 },
+        .s_loc = .{ .byte_index = 0, .bit_mask = 0b00000010, .bit_start = 1 },
+        .mod_loc = .{ .byte_index = 1, .bit_mask = 0b11000000, .bit_start = 6 },
+        .rm_loc = .{ .byte_index = 1, .bit_mask = 0b00000111, .bit_start = 0 },
+        .disp_low_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
+        .disp_high_loc = .{ .byte_index = 3, .bit_mask = 0b11111111 },
+        .data_low_loc = .{ .byte_index = 4, .bit_mask = 0b11111111 },
+        .data_high_loc = .{ .byte_index = 5, .bit_mask = 0b11111111 },
+        .data_if_w = true,
     },
 };
 
