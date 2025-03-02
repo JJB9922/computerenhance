@@ -2,6 +2,7 @@ const std = @import("std");
 const fp = @import("./core/file_processing.zig");
 const is = @import("./core/instruction_set.zig");
 const d = @import("./core/disassembler.zig");
+const s = @import("./core/simulator.zig");
 
 // Program Start
 pub fn main() !void {
@@ -43,6 +44,8 @@ pub fn main() !void {
         try stdout.print("bits 16\n\n", .{});
     }
 
+    var register_state: s.registers = s.registers{};
+
     var binary_pointer: u8 = 0;
 
     for (0..binary_from_compiled_asm.len - 1) |_| {
@@ -58,8 +61,17 @@ pub fn main() !void {
         instruction_ctx.address = binary_pointer;
 
         const instruction = try d.parse_instruction_to_string(allocator, binary_from_compiled_asm[binary_pointer .. binary_pointer + instruction_ctx.size], instruction_ctx);
-        try stdout.print("{s}\n", .{instruction});
+
+        if (!simMode) {
+            try stdout.print("{s}\n", .{instruction});
+        } else {
+            register_state = try s.instruction_handler(instruction, register_state);
+        }
 
         binary_pointer += instruction_ctx.size;
+    }
+
+    if (simMode) {
+        try s.print_register_state(register_state);
     }
 }
