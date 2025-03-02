@@ -39,12 +39,15 @@ pub fn main() !void {
         return err;
     };
 
+    if (!simMode) {
+        try stdout.print("bits 16\n\n", .{});
+    }
+
     var binary_pointer: u8 = 0;
 
     for (0..binary_from_compiled_asm.len - 1) |_| {
         // EOF
         if (binary_pointer >= binary_from_compiled_asm.len) {
-            try stdout.print("EOF REACHED\n", .{});
             break;
         }
 
