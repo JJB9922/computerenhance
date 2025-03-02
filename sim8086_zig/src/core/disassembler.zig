@@ -1,5 +1,6 @@
 const std = @import("std");
 const is = @import("./instruction_set.zig");
+const ph = @import("./parsing_helpers.zig");
 
 pub fn instruction_ctx_from_immediate(immediate: []u8) !is.instruction {
     var instruction = is.instruction{};
@@ -53,7 +54,7 @@ pub fn instruction_ctx_from_immediate(immediate: []u8) !is.instruction {
 }
 
 pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, instruction: is.instruction) ![]const u8 {
-    var opcode = try is.string_from_opcode(instruction.opcode_id);
+    var opcode = try ph.string_from_opcode(instruction.opcode_id);
     var mod: u8 = 0b00;
     var reg: []const u8 = "";
     var rm: []const u8 = "";
@@ -66,7 +67,7 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
 
     if (instruction.reg_loc != null) {
         const regBits: u8 = extract_field(binary, instruction.reg_loc.?);
-        reg = try is.string_from_reg_bits(regBits, instruction.w_on.?);
+        reg = try ph.string_from_reg_bits(regBits, instruction.w_on.?);
     }
 
     if (instruction.rm_loc != null) {
@@ -75,29 +76,29 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
         if (mod == 0b00) {
             if (rmBits == 0b110) {
                 const direct_address: i16 = (@as(i16, binary[3]) << 8) | (binary[2]);
-                rm = try is.string_from_rm_bits(allocator, rmBits, mod, direct_address);
+                rm = try ph.string_from_rm_bits(allocator, rmBits, mod, direct_address);
             } else {
-                rm = try is.string_from_rm_bits(allocator, rmBits, mod, 0);
+                rm = try ph.string_from_rm_bits(allocator, rmBits, mod, 0);
             }
         }
 
         if (mod == 0b11) {
-            rm = try is.string_from_reg_bits(rmBits, instruction.w_on.?);
+            rm = try ph.string_from_reg_bits(rmBits, instruction.w_on.?);
         }
 
         if (mod == 0b01) {
-            rm = try is.string_from_rm_bits(allocator, rmBits, mod, binary[2]);
+            rm = try ph.string_from_rm_bits(allocator, rmBits, mod, binary[2]);
         }
 
         if (mod == 0b10) {
             const displacement: i16 = (@as(i16, binary[3]) << 8) | (binary[2]);
-            rm = try is.string_from_rm_bits(allocator, rmBits, mod, displacement);
+            rm = try ph.string_from_rm_bits(allocator, rmBits, mod, displacement);
         }
     }
 
     if (instruction.arithmetic_id_loc != null) {
         const arithmetic_id = extract_field(binary, instruction.arithmetic_id_loc.?);
-        opcode = try is.arithmetic_operator_from_id_bits(arithmetic_id);
+        opcode = try ph.arithmetic_operator_from_id_bits(arithmetic_id);
     }
 
     if (instruction.d_loc != null) {
