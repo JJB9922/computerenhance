@@ -9,7 +9,7 @@ pub const FieldLoc = struct {
 
 pub const instruction = struct {
     size: u8 = 1,
-    address: u32 = 0x00,
+    address: i16 = 0x00,
     opcode_bits: u8 = 0b00000000,
     opcode_mask: u8 = 0b00000000,
     opcode_id: opcode = opcode.nop,
@@ -29,10 +29,12 @@ pub const instruction = struct {
     data_high_loc: ?FieldLoc = null,
     sr_loc: ?FieldLoc = null,
     arithmetic_id_loc: ?FieldLoc = null,
+    ip_inc8_loc: ?FieldLoc = null,
+
     data_if_w: ?bool = false,
     data_if_sw: ?bool = false,
     w_on: ?bool = false,
-    is_arithmetic: ?bool = false,
+    imm_to_acc: ?bool = false,
 };
 
 pub const instructions = [_]instruction{
@@ -48,7 +50,6 @@ pub const instructions = [_]instruction{
         .disp_low_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
         .disp_high_loc = .{ .byte_index = 3, .bit_mask = 0b11111111 },
     },
-
     instruction{
         .opcode_id = opcode.mov,
         .opcode_bits = 0b11000110,
@@ -62,7 +63,6 @@ pub const instructions = [_]instruction{
         .data_high_loc = .{ .byte_index = 5, .bit_mask = 0b11111111 },
         .data_if_w = true,
     },
-
     instruction{
         .opcode_id = opcode.mov,
         .opcode_bits = 0b10110000,
@@ -73,7 +73,6 @@ pub const instructions = [_]instruction{
         .data_high_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
         .data_if_w = true,
     },
-
     instruction{
         .opcode_id = opcode.add,
         .opcode_bits = 0b00000000,
@@ -86,7 +85,6 @@ pub const instructions = [_]instruction{
         .disp_low_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
         .disp_high_loc = .{ .byte_index = 3, .bit_mask = 0b11111111 },
     },
-
     instruction{
         .opcode_id = opcode.add,
         .opcode_bits = 0b10000000,
@@ -99,7 +97,219 @@ pub const instructions = [_]instruction{
         .disp_high_loc = .{ .byte_index = 3, .bit_mask = 0b11111111 },
         .data_low_loc = .{ .byte_index = 4, .bit_mask = 0b11111111 },
         .data_high_loc = .{ .byte_index = 5, .bit_mask = 0b11111111 },
+        .data_if_sw = true,
+        .arithmetic_id_loc = .{ .byte_index = 1, .bit_mask = 0b00111000, .bit_start = 3 },
+    },
+    instruction{
+        .opcode_id = opcode.add,
+        .opcode_bits = 0b00000100,
+        .opcode_mask = 0b11111110,
+        .w_loc = .{ .byte_index = 0, .bit_mask = 0b00000001, .bit_start = 0 },
+        .data_low_loc = .{ .byte_index = 1, .bit_mask = 0b11111111 },
+        .data_high_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
         .data_if_w = true,
+        .imm_to_acc = true,
+    },
+    instruction{
+        .opcode_id = opcode.sub,
+        .opcode_bits = 0b00101000,
+        .opcode_mask = 0b11111100,
+        .w_loc = .{ .byte_index = 0, .bit_mask = 0b00000001, .bit_start = 0 },
+        .d_loc = .{ .byte_index = 0, .bit_mask = 0b00000010, .bit_start = 1 },
+        .mod_loc = .{ .byte_index = 1, .bit_mask = 0b11000000, .bit_start = 6 },
+        .reg_loc = .{ .byte_index = 1, .bit_mask = 0b00111000, .bit_start = 3 },
+        .rm_loc = .{ .byte_index = 1, .bit_mask = 0b00000111, .bit_start = 0 },
+        .disp_low_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
+        .disp_high_loc = .{ .byte_index = 3, .bit_mask = 0b11111111 },
+    },
+    instruction{
+        .opcode_id = opcode.sub,
+        .opcode_bits = 0b10000000,
+        .opcode_mask = 0b11111100,
+        .w_loc = .{ .byte_index = 0, .bit_mask = 0b00000001, .bit_start = 0 },
+        .s_loc = .{ .byte_index = 0, .bit_mask = 0b00000010, .bit_start = 1 },
+        .mod_loc = .{ .byte_index = 1, .bit_mask = 0b11000000, .bit_start = 6 },
+        .rm_loc = .{ .byte_index = 1, .bit_mask = 0b00000111, .bit_start = 0 },
+        .disp_low_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
+        .disp_high_loc = .{ .byte_index = 3, .bit_mask = 0b11111111 },
+        .data_low_loc = .{ .byte_index = 4, .bit_mask = 0b11111111 },
+        .data_high_loc = .{ .byte_index = 5, .bit_mask = 0b11111111 },
+        .data_if_sw = true,
+        .arithmetic_id_loc = .{ .byte_index = 1, .bit_mask = 0b00111000, .bit_start = 3 },
+    },
+    instruction{
+        .opcode_id = opcode.sub,
+        .opcode_bits = 0b00101100,
+        .opcode_mask = 0b11111110,
+        .w_loc = .{ .byte_index = 0, .bit_mask = 0b00000001, .bit_start = 0 },
+        .data_low_loc = .{ .byte_index = 1, .bit_mask = 0b11111111 },
+        .data_high_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
+        .data_if_w = true,
+        .imm_to_acc = true,
+    },
+    instruction{
+        .opcode_id = opcode.cmp,
+        .opcode_bits = 0b00111000,
+        .opcode_mask = 0b11111100,
+        .w_loc = .{ .byte_index = 0, .bit_mask = 0b00000001, .bit_start = 0 },
+        .d_loc = .{ .byte_index = 0, .bit_mask = 0b00000010, .bit_start = 1 },
+        .mod_loc = .{ .byte_index = 1, .bit_mask = 0b11000000, .bit_start = 6 },
+        .reg_loc = .{ .byte_index = 1, .bit_mask = 0b00111000, .bit_start = 3 },
+        .rm_loc = .{ .byte_index = 1, .bit_mask = 0b00000111, .bit_start = 0 },
+        .disp_low_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
+        .disp_high_loc = .{ .byte_index = 3, .bit_mask = 0b11111111 },
+    },
+    instruction{
+        .opcode_id = opcode.cmp,
+        .opcode_bits = 0b10000000,
+        .opcode_mask = 0b11111100,
+        .w_loc = .{ .byte_index = 0, .bit_mask = 0b00000001, .bit_start = 0 },
+        .s_loc = .{ .byte_index = 0, .bit_mask = 0b00000010, .bit_start = 1 },
+        .mod_loc = .{ .byte_index = 1, .bit_mask = 0b11000000, .bit_start = 6 },
+        .rm_loc = .{ .byte_index = 1, .bit_mask = 0b00000111, .bit_start = 0 },
+        .disp_low_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
+        .disp_high_loc = .{ .byte_index = 3, .bit_mask = 0b11111111 },
+        .data_low_loc = .{ .byte_index = 4, .bit_mask = 0b11111111 },
+        .data_high_loc = .{ .byte_index = 5, .bit_mask = 0b11111111 },
+        .data_if_sw = true,
+        .arithmetic_id_loc = .{ .byte_index = 1, .bit_mask = 0b00111000, .bit_start = 3 },
+    },
+    instruction{
+        .opcode_id = opcode.cmp,
+        .opcode_bits = 0b00111100,
+        .opcode_mask = 0b11111110,
+        .w_loc = .{ .byte_index = 0, .bit_mask = 0b00000001, .bit_start = 0 },
+        .data_low_loc = .{ .byte_index = 1, .bit_mask = 0b11111111 },
+        .data_high_loc = .{ .byte_index = 2, .bit_mask = 0b11111111 },
+        .imm_to_acc = true,
+        .data_if_w = true,
+    },
+    instruction{
+        .opcode_id = opcode.jnz,
+        .opcode_bits = 0b01110101,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.je,
+        .opcode_bits = 0b01110100,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+
+    instruction{
+        .opcode_id = opcode.jl,
+        .opcode_bits = 0b01111100,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jle,
+        .opcode_bits = 0b01111110,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jb,
+        .opcode_bits = 0b01110010,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jbe,
+        .opcode_bits = 0b01110110,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jp,
+        .opcode_bits = 0b01111010,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jo,
+        .opcode_bits = 0b01110000,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.js,
+        .opcode_bits = 0b01111000,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jne,
+        .opcode_bits = 0b01110101,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jnl,
+        .opcode_bits = 0b01111101,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jg,
+        .opcode_bits = 0b01111111,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jnb,
+        .opcode_bits = 0b01110011,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.ja,
+        .opcode_bits = 0b01110111,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jnp,
+        .opcode_bits = 0b01111011,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jno,
+        .opcode_bits = 0b01110001,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jns,
+        .opcode_bits = 0b01111001,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.loop,
+        .opcode_bits = 0b11100010,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.loopz,
+        .opcode_bits = 0b11100001,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.loopnz,
+        .opcode_bits = 0b11100000,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
+    },
+    instruction{
+        .opcode_id = opcode.jcxz,
+        .opcode_bits = 0b11100011,
+        .opcode_mask = 0b11111111,
+        .ip_inc8_loc = .{ .byte_index = 1, .bit_mask = 0b11111111, .bit_start = 0 },
     },
 };
 
@@ -107,6 +317,29 @@ pub const opcode = enum {
     nop,
     mov,
     add,
+    sub,
+    cmp,
+    jnz,
+    je,
+    jl,
+    jle,
+    jb,
+    jbe,
+    jp,
+    jo,
+    js,
+    jne,
+    jnl,
+    jg,
+    jnb,
+    ja,
+    jnp,
+    jno,
+    jns,
+    loop,
+    loopz,
+    loopnz,
+    jcxz,
 };
 
 pub fn string_from_opcode(op: opcode) ![]const u8 {
@@ -114,6 +347,29 @@ pub fn string_from_opcode(op: opcode) ![]const u8 {
         opcode.nop => return "nop",
         opcode.mov => return "mov",
         opcode.add => return "add",
+        opcode.sub => return "sub",
+        opcode.cmp => return "cmp",
+        opcode.jnz => return "jnz",
+        opcode.je => return "je",
+        opcode.jl => return "jl",
+        opcode.jle => return "jle",
+        opcode.jb => return "jb",
+        opcode.jbe => return "jbe",
+        opcode.jp => return "jp",
+        opcode.jo => return "jo",
+        opcode.js => return "js",
+        opcode.jne => return "jne",
+        opcode.jnl => return "jnl",
+        opcode.jg => return "jg",
+        opcode.jnb => return "jnb",
+        opcode.ja => return "ja",
+        opcode.jnp => return "jnp",
+        opcode.jno => return "jno",
+        opcode.jns => return "jns",
+        opcode.loop => return "loop",
+        opcode.loopz => return "loopz",
+        opcode.loopnz => return "loopnz",
+        opcode.jcxz => return "jcxz",
     }
 }
 
@@ -141,7 +397,10 @@ pub fn string_from_rm_bits(allocator: std.mem.Allocator, rm: u8, mod: u8, displa
                 0b011 => return "[bp + di]",
                 0b100 => return "[si]",
                 0b101 => return "[di]",
-                0b110 => return "direct address...",
+                0b110 => {
+                    const ea: []const u8 = try std.fmt.allocPrint(allocator, "[{d}]", .{displacement});
+                    return ea;
+                },
                 0b111 => return "bx",
                 else => return "??",
             }
@@ -184,5 +443,16 @@ pub fn string_from_rm_bits(allocator: std.mem.Allocator, rm: u8, mod: u8, displa
             }
         },
         else => return "??",
+    }
+}
+
+pub fn arithmetic_operator_from_id_bits(arithmetic_id: u8) ![]const u8 {
+    switch (arithmetic_id) {
+        0b000 => return "add",
+        0b010 => return "adc",
+        0b101 => return "sub",
+        0b011 => return "sbb",
+        0b111 => return "cmp",
+        else => return "???",
     }
 }
