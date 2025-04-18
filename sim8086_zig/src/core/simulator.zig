@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const registers = struct {
     al: u8,
     cl: u8,
@@ -17,3 +19,8 @@ pub const registers = struct {
     si: u8,
     di: u8,
 };
+
+pub fn print_registers(rs: registers) !void {
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("AL: {}, CL: {}, DL: {}, BL: {}", .{ rs.al, rs.cl, rs.dl, rs.bl });
+}

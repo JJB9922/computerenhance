@@ -45,8 +45,29 @@ pub fn main() !void {
     }
 
     var binary_pointer: u8 = 0;
+    var registers = s.registers{
+        .al = 0,
+        .cl = 0,
+        .dl = 0,
+        .bl = 0,
+        .ah = 0,
+        .ch = 0,
+        .dh = 0,
+        .bh = 0,
+
+        .ax = 0,
+        .cx = 0,
+        .dx = 0,
+        .bx = 0,
+
+        .sp = 0,
+        .bp = 0,
+        .si = 0,
+        .di = 0,
+    };
 
     for (0..binary_from_compiled_asm.len - 1) |_| {
+
         // EOF
         if (binary_pointer >= binary_from_compiled_asm.len) {
             break;
@@ -62,9 +83,12 @@ pub fn main() !void {
         if (!simMode) {
             try stdout.print("{s}\n", .{instruction});
         } else {
-            s.process_instruction()
+            registers.al = 3;
+            //s.process_instruction(registers);
         }
 
         binary_pointer += instruction_ctx.size;
     }
+
+    try s.print_registers(registers);
 }
