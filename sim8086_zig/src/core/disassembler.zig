@@ -16,11 +16,11 @@ pub fn instruction_ctx_from_immediate(immediate: []u8) !is.instruction {
 
     if (instruction.mod_loc != null) {
         instruction.size += 1;
-        mod = extract_field(immediate, instruction.mod_loc.?);
+        mod = ph.extract_field(immediate, instruction.mod_loc.?);
 
         switch (mod) {
             0b00 => {
-                const rm = extract_field(immediate, instruction.rm_loc.?);
+                const rm = ph.extract_field(immediate, instruction.rm_loc.?);
                 if (rm == 0b110) instruction.size += 2;
             },
             0b01 => instruction.size += 1,
@@ -30,7 +30,7 @@ pub fn instruction_ctx_from_immediate(immediate: []u8) !is.instruction {
     }
 
     if (instruction.w_loc != null) {
-        w = extract_field(immediate, instruction.w_loc.?);
+        w = ph.extract_field(immediate, instruction.w_loc.?);
         if (w == 1) {
             instruction.w_on = true;
             if (instruction.data_if_w == true) {
@@ -38,7 +38,7 @@ pub fn instruction_ctx_from_immediate(immediate: []u8) !is.instruction {
             }
 
             if (instruction.data_if_sw == true) {
-                const s = extract_field(immediate, instruction.s_loc.?);
+                const s = ph.extract_field(immediate, instruction.s_loc.?);
                 if (s == 0) {
                     instruction.size += 1;
                 }
@@ -62,16 +62,16 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
     var mut_instruction = instruction;
 
     if (instruction.mod_loc != null) {
-        mod = extract_field(binary, instruction.mod_loc.?);
+        mod = ph.extract_field(binary, instruction.mod_loc.?);
     }
 
     if (instruction.reg_loc != null) {
-        const regBits: u8 = extract_field(binary, instruction.reg_loc.?);
+        const regBits: u8 = ph.extract_field(binary, instruction.reg_loc.?);
         reg = try ph.string_from_reg_bits(regBits, instruction.w_on.?);
     }
 
     if (instruction.rm_loc != null) {
-        const rmBits: u8 = extract_field(binary, instruction.rm_loc.?);
+        const rmBits: u8 = ph.extract_field(binary, instruction.rm_loc.?);
 
         if (mod == 0b00) {
             if (rmBits == 0b110) {
@@ -97,12 +97,12 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
     }
 
     if (instruction.arithmetic_id_loc != null) {
-        const arithmetic_id = extract_field(binary, instruction.arithmetic_id_loc.?);
+        const arithmetic_id = ph.extract_field(binary, instruction.arithmetic_id_loc.?);
         opcode = try ph.arithmetic_operator_from_id_bits(arithmetic_id);
     }
 
     if (instruction.d_loc != null) {
-        d = extract_field(binary, instruction.d_loc.?);
+        d = ph.extract_field(binary, instruction.d_loc.?);
     }
 
     if (instruction.imm_to_acc.?) {
@@ -126,11 +126,11 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
         }
 
         var imm_data: i16 = 0;
-        const lowData = extract_field(binary, mut_instruction.data_low_loc.?);
+        const lowData = ph.extract_field(binary, mut_instruction.data_low_loc.?);
         imm_data = @as(i8, @bitCast(lowData));
 
         if (mut_instruction.data_if_w.? and mut_instruction.w_on.? and mut_instruction.data_high_loc != null) {
-            const highData = extract_field(binary, mut_instruction.data_high_loc.?);
+            const highData = ph.extract_field(binary, mut_instruction.data_high_loc.?);
 
             imm_data = @as(i16, highData) << 8 | @as(i16, lowData);
         }
@@ -154,10 +154,4 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
     } else {
         return std.fmt.allocPrint(allocator, "{s} {s}, {s}", .{ opcode, rm, reg });
     }
-}
-
-fn extract_field(data: []u8, field_loc: is.FieldLoc) u8 {
-    const byte = data[field_loc.byte_index];
-    const masked_byte = byte & field_loc.bit_mask;
-    return masked_byte >> field_loc.bit_start;
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const is = @import("instruction_set.zig");
 const opcode = @import("instruction_set.zig").opcode;
 
 pub fn string_from_opcode(op: opcode) ![]const u8 {
@@ -114,4 +115,10 @@ pub fn arithmetic_operator_from_id_bits(arithmetic_id: u8) ![]const u8 {
         0b111 => return "cmp",
         else => return "???",
     }
+}
+
+pub fn extract_field(data: []u8, field_loc: is.FieldLoc) u8 {
+    const byte = data[field_loc.byte_index];
+    const masked_byte = byte & field_loc.bit_mask;
+    return masked_byte >> field_loc.bit_start;
 }

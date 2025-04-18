@@ -13,6 +13,7 @@ pub const instruction = struct {
     opcode_bits: u8 = 0b00000000,
     opcode_mask: u8 = 0b00000000,
     opcode_id: opcode = opcode.nop,
+    binary: []u8 = "",
 
     // Field locations
     d_loc: ?FieldLoc = null,

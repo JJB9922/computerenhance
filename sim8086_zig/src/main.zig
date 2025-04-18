@@ -45,7 +45,7 @@ pub fn main() !void {
     }
 
     var binary_pointer: u8 = 0;
-    var registers = s.registers{
+    const registers = s.registers{
         .al = 0,
         .cl = 0,
         .dl = 0,
@@ -78,13 +78,14 @@ pub fn main() !void {
         var instruction_ctx = try d.instruction_ctx_from_immediate(immediate);
 
         instruction_ctx.address = binary_pointer;
+        instruction_ctx.binary = binary_from_compiled_asm[binary_pointer .. binary_pointer + instruction_ctx.size];
 
         const instruction = try d.parse_instruction_to_string(allocator, binary_from_compiled_asm[binary_pointer .. binary_pointer + instruction_ctx.size], instruction_ctx);
+
         if (!simMode) {
             try stdout.print("{s}\n", .{instruction});
         } else {
-            registers.al = 3;
-            //s.process_instruction(registers);
+            try s.simulate_instructions(registers, instruction_ctx);
         }
 
         binary_pointer += instruction_ctx.size;
