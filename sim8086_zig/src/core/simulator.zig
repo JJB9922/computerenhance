@@ -54,6 +54,8 @@ pub fn simulate_instructions(rs: *registers, instruction: *i.instruction, alloca
                     }
                 }
             }
+
+            return error.UnableToParseMovInstruction;
         },
         else => {
             try stderr.print("Attempted to simulate unsupported instruction {s}", .{try ph.string_from_opcode(instruction.opcode_id)});
