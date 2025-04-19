@@ -8,6 +8,7 @@ pub const FieldLoc = struct {
 };
 
 pub const instruction = struct {
+    // Bases
     size: u8 = 1,
     address: i16 = 0x00,
     opcode_bits: u8 = 0b00000000,
@@ -31,10 +32,17 @@ pub const instruction = struct {
     arithmetic_id_loc: ?FieldLoc = null,
     ip_inc8_loc: ?FieldLoc = null,
 
+    // Flags
     data_if_w: ?bool = false,
     data_if_sw: ?bool = false,
     w_on: ?bool = false,
     imm_to_acc: ?bool = false,
+
+    // I shouldn't put these here but its a quick lazy easy way to do it
+    binary: []u8 = "",
+    source_reg: []const u8 = "",
+    destination: []const u8 = "",
+    source_int: i16 = 0,
 };
 
 pub const instructions = [_]instruction{

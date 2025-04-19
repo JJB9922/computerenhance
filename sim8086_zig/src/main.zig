@@ -2,8 +2,8 @@ const std = @import("std");
 const fp = @import("./core/file_processing.zig");
 const is = @import("./core/instruction_set.zig");
 const d = @import("./core/disassembler.zig");
+const s = @import("./core/simulator.zig");
 
-// Program Start
 pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
@@ -44,8 +44,10 @@ pub fn main() !void {
     }
 
     var binary_pointer: u8 = 0;
+    var registers = s.registers{};
 
     for (0..binary_from_compiled_asm.len - 1) |_| {
+
         // EOF
         if (binary_pointer >= binary_from_compiled_asm.len) {
             break;
@@ -56,10 +58,20 @@ pub fn main() !void {
         var instruction_ctx = try d.instruction_ctx_from_immediate(immediate);
 
         instruction_ctx.address = binary_pointer;
+        instruction_ctx.binary = binary_from_compiled_asm[binary_pointer .. binary_pointer + instruction_ctx.size];
 
-        const instruction = try d.parse_instruction_to_string(allocator, binary_from_compiled_asm[binary_pointer .. binary_pointer + instruction_ctx.size], instruction_ctx);
-        try stdout.print("{s}\n", .{instruction});
+        const instruction = try d.parse_instruction_to_string(allocator, instruction_ctx.binary, &instruction_ctx);
+
+        if (!simMode) {
+            try stdout.print("{s}\n", .{instruction});
+        } else {
+            try s.simulate_instructions(&registers, &instruction_ctx, allocator);
+        }
 
         binary_pointer += instruction_ctx.size;
+    }
+
+    if (simMode) {
+        try s.print_registers(registers);
     }
 }
