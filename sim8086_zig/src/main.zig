@@ -4,7 +4,6 @@ const is = @import("./core/instruction_set.zig");
 const d = @import("./core/disassembler.zig");
 const s = @import("./core/simulator.zig");
 
-// Program Start
 pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
@@ -45,26 +44,7 @@ pub fn main() !void {
     }
 
     var binary_pointer: u8 = 0;
-    const registers = s.registers{
-        .al = 0,
-        .cl = 0,
-        .dl = 0,
-        .bl = 0,
-        .ah = 0,
-        .ch = 0,
-        .dh = 0,
-        .bh = 0,
-
-        .ax = 0,
-        .cx = 0,
-        .dx = 0,
-        .bx = 0,
-
-        .sp = 0,
-        .bp = 0,
-        .si = 0,
-        .di = 0,
-    };
+    const registers = s.registers{};
 
     for (0..binary_from_compiled_asm.len - 1) |_| {
 
@@ -80,16 +60,18 @@ pub fn main() !void {
         instruction_ctx.address = binary_pointer;
         instruction_ctx.binary = binary_from_compiled_asm[binary_pointer .. binary_pointer + instruction_ctx.size];
 
-        const instruction = try d.parse_instruction_to_string(allocator, binary_from_compiled_asm[binary_pointer .. binary_pointer + instruction_ctx.size], instruction_ctx);
+        const instruction = try d.parse_instruction_to_string(allocator, instruction_ctx.binary, &instruction_ctx);
 
         if (!simMode) {
             try stdout.print("{s}\n", .{instruction});
         } else {
-            try s.simulate_instructions(registers, instruction_ctx);
+            try s.simulate_instructions(registers, &instruction_ctx);
         }
 
         binary_pointer += instruction_ctx.size;
     }
 
-    try s.print_registers(registers);
+    if (simMode) {
+        try s.print_registers(registers);
+    }
 }

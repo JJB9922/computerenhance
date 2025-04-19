@@ -53,13 +53,12 @@ pub fn instruction_ctx_from_immediate(immediate: []u8) !is.instruction {
     return instruction;
 }
 
-pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, instruction: is.instruction) ![]const u8 {
+pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, instruction: *is.instruction) ![]const u8 {
     var opcode = try ph.string_from_opcode(instruction.opcode_id);
     var mod: u8 = 0b00;
     var reg: []const u8 = "";
     var rm: []const u8 = "";
     var d: u8 = 0;
-    var mut_instruction = instruction;
 
     if (instruction.mod_loc != null) {
         mod = ph.extract_field(binary, instruction.mod_loc.?);
@@ -110,35 +109,39 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
         rm = if (instruction.w_on.?) "ax" else "al";
     }
 
-    if (mut_instruction.data_low_loc != null) {
-        if (mut_instruction.mod_loc != null) {
+    if (instruction.data_low_loc != null) {
+        if (instruction.mod_loc != null) {
             switch (mod) {
                 0b00, 0b11 => {
-                    mut_instruction.data_low_loc.?.byte_index -= 2;
-                    mut_instruction.data_high_loc.?.byte_index -= 2;
+                    instruction.data_low_loc.?.byte_index -= 2;
+                    instruction.data_high_loc.?.byte_index -= 2;
                 },
                 0b01 => {
-                    mut_instruction.disp_low_loc.?.byte_index -= 1;
-                    mut_instruction.data_high_loc.?.byte_index -= 1;
+                    instruction.disp_low_loc.?.byte_index -= 1;
+                    instruction.data_high_loc.?.byte_index -= 1;
                 },
                 else => {},
             }
         }
 
         var imm_data: i16 = 0;
-        const lowData = ph.extract_field(binary, mut_instruction.data_low_loc.?);
+        const lowData = ph.extract_field(binary, instruction.data_low_loc.?);
         imm_data = @as(i8, @bitCast(lowData));
 
-        if (mut_instruction.data_if_w.? and mut_instruction.w_on.? and mut_instruction.data_high_loc != null) {
-            const highData = ph.extract_field(binary, mut_instruction.data_high_loc.?);
+        if (instruction.data_if_w.? and instruction.w_on.? and instruction.data_high_loc != null) {
+            const highData = ph.extract_field(binary, instruction.data_high_loc.?);
 
             imm_data = @as(i16, highData) << 8 | @as(i16, lowData);
         }
 
         if (instruction.reg_loc != null) {
+            instruction.destination = reg;
+            instruction.source_int = imm_data;
             return std.fmt.allocPrint(allocator, "{s} {s}, {d}", .{ opcode, reg, imm_data });
         }
 
+        instruction.destination = rm;
+        instruction.source_int = imm_data;
         return std.fmt.allocPrint(allocator, "{s} {s}, {d}", .{ opcode, rm, imm_data });
     }
 
@@ -150,8 +153,14 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
     }
 
     if (d == 1) {
+        instruction.destination = reg;
+        instruction.source_reg = rm;
+
         return std.fmt.allocPrint(allocator, "{s} {s}, {s}", .{ opcode, reg, rm });
     } else {
+        instruction.destination = rm;
+        instruction.source_reg = reg;
+
         return std.fmt.allocPrint(allocator, "{s} {s}, {s}", .{ opcode, rm, reg });
     }
 }
