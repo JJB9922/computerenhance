@@ -44,7 +44,7 @@ pub fn main() !void {
     }
 
     var binary_pointer: u8 = 0;
-    const registers = s.registers{};
+    var registers = s.registers{};
 
     for (0..binary_from_compiled_asm.len - 1) |_| {
 
@@ -65,7 +65,7 @@ pub fn main() !void {
         if (!simMode) {
             try stdout.print("{s}\n", .{instruction});
         } else {
-            try s.simulate_instructions(registers, &instruction_ctx);
+            try s.simulate_instructions(&registers, &instruction_ctx, allocator);
         }
 
         binary_pointer += instruction_ctx.size;
