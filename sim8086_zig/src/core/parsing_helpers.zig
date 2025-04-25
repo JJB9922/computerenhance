@@ -30,6 +30,8 @@ pub fn string_from_opcode(op: opcode) ![]const u8 {
         opcode.loopz => return "loopz",
         opcode.loopnz => return "loopnz",
         opcode.jcxz => return "jcxz",
+
+        opcode.arithmetic => return "arithmetic",
     }
 }
 

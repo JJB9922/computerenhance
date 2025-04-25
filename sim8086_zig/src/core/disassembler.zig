@@ -14,6 +14,7 @@ pub fn instruction_ctx_from_immediate(immediate: []u8) !is.instruction {
 
     var mod: u8 = 0;
     var w: u8 = 0;
+    var s: u8 = 0;
 
     if (instruction.mod_loc != null) {
         instruction.size += 1;
@@ -39,11 +40,18 @@ pub fn instruction_ctx_from_immediate(immediate: []u8) !is.instruction {
             }
 
             if (instruction.data_if_sw == true) {
-                const s = ph.extract_field(immediate, instruction.s_loc.?);
+                s = ph.extract_field(immediate, instruction.s_loc.?);
                 if (s == 0) {
                     instruction.size += 1;
                 }
             }
+        }
+    }
+
+    if (instruction.s_loc != null) {
+        s = ph.extract_field(immediate, instruction.s_loc.?);
+        if (s == 1) {
+            instruction.s_on = true;
         }
     }
 
@@ -99,8 +107,6 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
     if (instruction.arithmetic_id_loc != null) {
         const arithmetic_id = ph.extract_field(binary, instruction.arithmetic_id_loc.?);
         opcode = try ph.arithmetic_operator_from_id_bits(arithmetic_id);
-        // Filthy. Disgusting. Beautiful.
-        instruction.*.opcode_id = try ph.opcode_from_string(opcode);
     }
 
     if (instruction.d_loc != null) {
@@ -129,11 +135,11 @@ pub fn parse_instruction_to_string(allocator: std.mem.Allocator, binary: []u8, i
 
         var imm_data: u16 = 0;
         const lowData = ph.extract_field(binary, instruction.data_low_loc.?);
-        const w_and_data_high = instruction.w_on.? and instruction.data_high_loc != null;
 
-        if ((instruction.data_if_w.? or instruction.data_if_sw.?) and w_and_data_high) {
+        if (instruction.w_on.? and (instruction.s_on != true)) {
             const highData = ph.extract_field(binary, instruction.data_high_loc.?);
             imm_data = (@as(u16, highData) << 8) | @as(u16, lowData);
+            instruction.*.opcode_id = try ph.opcode_from_string(opcode);
         } else {
             imm_data = @as(u8, @bitCast(lowData));
         }
