@@ -10,7 +10,7 @@ pub const FieldLoc = struct {
 pub const instruction = struct {
     // Bases
     size: u8 = 1,
-    address: i16 = 0x00,
+    address: u16 = 0x00,
     opcode_bits: u8 = 0b00000000,
     opcode_mask: u8 = 0b00000000,
     opcode_id: opcode = opcode.nop,
@@ -41,8 +41,8 @@ pub const instruction = struct {
     // I shouldn't put these here but its a quick lazy easy way to do it
     binary: []u8 = "",
     source_reg: []const u8 = "",
-    destination: []const u8 = "",
-    source_int: i16 = 0,
+    destination_reg: []const u8 = "",
+    source_int: u16 = 0,
 };
 
 pub const instructions = [_]instruction{

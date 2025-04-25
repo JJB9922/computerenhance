@@ -1,5 +1,6 @@
 .{
-    .name = "sim8086_zig",
+    .name = .sim8086_zig,
+    .fingerprint = 0x197b3f4c052650a0,
 
     .version = "0.0.0",
 

@@ -45,8 +45,9 @@ pub fn main() !void {
 
     var binary_pointer: u8 = 0;
     var registers = s.registers{};
+    var flags = s.flags{};
 
-    for (0..binary_from_compiled_asm.len - 1) |_| {
+    for (0..binary_from_compiled_asm.len) |_| {
 
         // EOF
         if (binary_pointer >= binary_from_compiled_asm.len) {
@@ -65,7 +66,7 @@ pub fn main() !void {
         if (!simMode) {
             try stdout.print("{s}\n", .{instruction});
         } else {
-            try s.simulate_instructions(&registers, &instruction_ctx, allocator);
+            try s.simulate_instructions(&registers, &flags, &instruction_ctx, allocator);
         }
 
         binary_pointer += instruction_ctx.size;
@@ -73,5 +74,6 @@ pub fn main() !void {
 
     if (simMode) {
         try s.print_registers(registers);
+        try s.print_flags(flags);
     }
 }

@@ -33,6 +33,37 @@ pub fn string_from_opcode(op: opcode) ![]const u8 {
     }
 }
 
+pub fn opcode_from_string(s: []const u8) !opcode {
+    if (std.mem.eql(u8, s, "nop")) return opcode.nop;
+    if (std.mem.eql(u8, s, "mov")) return opcode.mov;
+    if (std.mem.eql(u8, s, "add")) return opcode.add;
+    if (std.mem.eql(u8, s, "sub")) return opcode.sub;
+    if (std.mem.eql(u8, s, "cmp")) return opcode.cmp;
+    if (std.mem.eql(u8, s, "jnz")) return opcode.jnz;
+    if (std.mem.eql(u8, s, "je")) return opcode.je;
+    if (std.mem.eql(u8, s, "jl")) return opcode.jl;
+    if (std.mem.eql(u8, s, "jle")) return opcode.jle;
+    if (std.mem.eql(u8, s, "jb")) return opcode.jb;
+    if (std.mem.eql(u8, s, "jbe")) return opcode.jbe;
+    if (std.mem.eql(u8, s, "jp")) return opcode.jp;
+    if (std.mem.eql(u8, s, "jo")) return opcode.jo;
+    if (std.mem.eql(u8, s, "js")) return opcode.js;
+    if (std.mem.eql(u8, s, "jne")) return opcode.jne;
+    if (std.mem.eql(u8, s, "jnl")) return opcode.jnl;
+    if (std.mem.eql(u8, s, "jg")) return opcode.jg;
+    if (std.mem.eql(u8, s, "jnb")) return opcode.jnb;
+    if (std.mem.eql(u8, s, "ja")) return opcode.ja;
+    if (std.mem.eql(u8, s, "jnp")) return opcode.jnp;
+    if (std.mem.eql(u8, s, "jno")) return opcode.jno;
+    if (std.mem.eql(u8, s, "jns")) return opcode.jns;
+    if (std.mem.eql(u8, s, "loop")) return opcode.loop;
+    if (std.mem.eql(u8, s, "loopz")) return opcode.loopz;
+    if (std.mem.eql(u8, s, "loopnz")) return opcode.loopnz;
+    if (std.mem.eql(u8, s, "jcxz")) return opcode.jcxz;
+
+    return error.UnknownOpcode;
+}
+
 pub fn string_from_reg_bits(reg: u8, w: bool) ![]const u8 {
     switch (reg) {
         0b000 => return if (w) "ax" else "al",
@@ -47,7 +78,7 @@ pub fn string_from_reg_bits(reg: u8, w: bool) ![]const u8 {
     }
 }
 
-pub fn string_from_rm_bits(allocator: std.mem.Allocator, rm: u8, mod: u8, displacement: i16) ![]const u8 {
+pub fn string_from_rm_bits(allocator: std.mem.Allocator, rm: u8, mod: u8, displacement: u16) ![]const u8 {
     switch (mod) {
         0b00 => {
             switch (rm) {
