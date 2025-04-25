@@ -21,6 +21,8 @@ pub const registers = struct {
     bp: u16 = 0,
     si: u16 = 0,
     di: u16 = 0,
+
+    ip: u16 = 0,
 };
 
 pub const flags = struct {
@@ -36,6 +38,7 @@ pub fn print_registers(rs: registers) !void {
     const stdout = std.io.getStdOut().writer();
     try stdout.print("AX: {d}, CX: {d}, DX: {d}, BX: {d}\n", .{ rs.ax, rs.cx, rs.dx, rs.bx });
     try stdout.print("SP: {d}, BP: {d}, SI: {d}, DI: {d}\n", .{ rs.sp, rs.bp, rs.si, rs.di });
+    try stdout.print("IP: {d}\n", .{rs.ip});
 }
 
 pub fn print_flags(f: flags) !void {
@@ -43,7 +46,13 @@ pub fn print_flags(f: flags) !void {
     try stdout.print("C: {d}, Z: {d}, S: {d}, O: {d}, P: {d}, A: {d}\n", .{ f.c, f.z, f.s, f.o, f.p, f.a });
 }
 
+pub fn print_ip(rs: registers) !void {
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("IP: 0x{x:0>4}\n", .{rs.ip});
+}
+
 pub fn simulate_instructions(rs: *registers, f: *flags, instruction: *i.instruction, allocator: std.mem.Allocator) !void {
+    try print_ip(rs.*);
     const stderr = std.io.getStdErr().writer();
     var register_map = std.StringHashMap(*u16).init(allocator);
     try create_register_map(&register_map, rs);
@@ -89,6 +98,8 @@ fn create_register_map(map: *std.StringHashMap(*u16), rs: *registers) !void {
     try map.put("bp", &rs.bp);
     try map.put("si", &rs.si);
     try map.put("di", &rs.di);
+
+    try map.put("ip", &rs.ip);
 }
 
 fn get_operands(instruction: *i.instruction, register_map: *std.StringHashMap(*u16)) ?struct {
@@ -114,23 +125,25 @@ fn simulate_mov(instruction: *i.instruction, register_map: *std.StringHashMap(*u
 
 fn simulate_add(instruction: *i.instruction, register_map: *std.StringHashMap(*u16), f: *flags) !void {
     const operands = get_operands(instruction, register_map) orelse return error.UnableToParseAddInstruction;
-    operands.dst.* += operands.src;
+    const result: i16 = @as(i16, @bitCast(operands.dst.*)) + @as(i16, @bitCast(operands.src));
+    operands.dst.* = @as(u16, @bitCast(result));
     set_flags(operands.dst.*, f);
 }
 
 fn simulate_sub(instruction: *i.instruction, register_map: *std.StringHashMap(*u16), f: *flags) !void {
     const operands = get_operands(instruction, register_map) orelse return error.UnableToParseSubInstruction;
-    operands.dst.* -= operands.src;
+    const result: i16 = @as(i16, @bitCast(operands.dst.*)) - @as(i16, @bitCast(operands.src));
+    operands.dst.* = @as(u16, @bitCast(result));
     set_flags(operands.dst.*, f);
 }
 
 fn simulate_cmp(instruction: *i.instruction, register_map: *std.StringHashMap(*u16), f: *flags) !void {
     const operands = get_operands(instruction, register_map) orelse return error.UnableToParseCmpInstruction;
-    const copy = operands.dst.* - operands.src;
-    set_flags(copy, f);
+    const result: i16 = @as(i16, @bitCast(operands.dst.*)) - @as(i16, @bitCast(operands.src));
+    set_flags(@as(u16, @bitCast(result)), f);
 }
 
 fn set_flags(result: u16, f: *flags) void {
-    f.*.z = if (result == 0) 1 else 0;
+    f.z = if (result == 0) 1 else 0;
     f.s = if ((result & 0x8000) != 0) 1 else 0;
 }

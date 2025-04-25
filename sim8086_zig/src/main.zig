@@ -48,6 +48,7 @@ pub fn main() !void {
     var flags = s.flags{};
 
     for (0..binary_from_compiled_asm.len) |_| {
+        registers.ip = binary_pointer;
 
         // EOF
         if (binary_pointer >= binary_from_compiled_asm.len) {
@@ -73,6 +74,7 @@ pub fn main() !void {
     }
 
     if (simMode) {
+        try s.print_ip(registers);
         try s.print_registers(registers);
         try s.print_flags(flags);
     }
