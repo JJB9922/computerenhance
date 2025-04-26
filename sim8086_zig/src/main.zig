@@ -86,7 +86,7 @@ pub fn main() !void {
         try s.print_flags(flags);
 
         if (dump) {
-            const file = try std.fs.cwd().createFile("memory_dump_0.data", .{});
+            const file = try std.fs.cwd().createFile("memory_dump.data", .{});
             defer file.close();
 
             try file.writeAll(&s.memory);
