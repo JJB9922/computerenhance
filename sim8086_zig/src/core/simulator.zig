@@ -34,8 +34,19 @@ pub const flags = struct {
     a: i2 = 0,
 };
 
+const Operand = struct {
+    dst: union(enum) {
+        reg: *u16,
+        mem: u16,
+    },
+    src: u16,
+};
+
+pub var memory: [1024 * 1024]u8 = undefined;
+
 pub fn print_registers(rs: registers) !void {
     const stdout = std.io.getStdOut().writer();
+    try stdout.print("\n\n--- FINAL STATE---\n\n", .{});
     try stdout.print("AX: {d}, CX: {d}, DX: {d}, BX: {d}\n", .{ rs.ax, rs.cx, rs.dx, rs.bx });
     try stdout.print("SP: {d}, BP: {d}, SI: {d}, DI: {d}\n", .{ rs.sp, rs.bp, rs.si, rs.di });
     try stdout.print("IP: {d}\n", .{rs.ip});
@@ -48,7 +59,7 @@ pub fn print_flags(f: flags) !void {
 
 pub fn print_ip(rs: registers) !void {
     const stdout = std.io.getStdOut().writer();
-    try stdout.print("IP: 0x{x:0>4}\n", .{rs.ip});
+    try stdout.print("| IP: 0x{x:0>4} |\n", .{rs.ip});
 }
 
 pub fn simulate_instructions(rs: *registers, f: *flags, instruction: *i.instruction, allocator: std.mem.Allocator) !void {
@@ -69,6 +80,9 @@ pub fn simulate_instructions(rs: *registers, f: *flags, instruction: *i.instruct
         },
         i.opcode.cmp => {
             return try simulate_cmp(instruction, &register_map, f);
+        },
+        i.opcode.jnz => {
+            return try simulate_jnz(instruction, rs, f);
         },
         else => {
             try stderr.print("Attempted to simulate unsupported instruction {s}: ", .{try ph.string_from_opcode(instruction.opcode_id)});
@@ -102,45 +116,190 @@ fn create_register_map(map: *std.StringHashMap(*u16), rs: *registers) !void {
     try map.put("ip", &rs.ip);
 }
 
-fn get_operands(instruction: *i.instruction, register_map: *std.StringHashMap(*u16)) ?struct {
-    dst: *u16,
-    src: u16,
-} {
+fn solve_memory_address(instruction: *i.instruction, register_map: *std.StringHashMap(*u16)) ?u16 {
+    var to_solve = instruction.destination_reg;
+    if (std.mem.startsWith(u8, to_solve, "word ")) {
+        to_solve = to_solve[5..];
+    }
+    to_solve = to_solve[1 .. to_solve.len - 1];
+
+    var it = std.mem.splitSequence(u8, to_solve, " ");
+    var base: u16 = 0;
+    var offset: i16 = 0;
+    var op: enum { Add, Sub } = .Add;
+
+    while (it.next()) |x| {
+        if (register_map.get(x)) |reg| {
+            base += reg.*;
+            continue;
+        }
+
+        if (std.mem.eql(u8, "+", x)) {
+            op = .Add;
+            continue;
+        }
+
+        if (std.mem.eql(u8, "-", x)) {
+            op = .Sub;
+            continue;
+        }
+
+        const num = std.fmt.parseInt(i16, x, 10) catch return null;
+        if (op == .Add) {
+            offset += num;
+        } else {
+            offset -= num;
+        }
+    }
+
+    return @intCast(@as(i32, base) + offset);
+}
+
+fn solve_memory_address_source(instruction: *i.instruction, register_map: *std.StringHashMap(*u16)) ?u16 {
+    var to_solve = instruction.source_reg;
+    if (std.mem.startsWith(u8, to_solve, "word ")) {
+        to_solve = to_solve[5..];
+    }
+    to_solve = to_solve[1 .. to_solve.len - 1];
+
+    var it = std.mem.splitSequence(u8, to_solve, " ");
+    var base: u16 = 0;
+    var offset: i16 = 0;
+    var op: enum { Add, Sub } = .Add;
+
+    while (it.next()) |x| {
+        if (register_map.get(x)) |reg| {
+            base += reg.*;
+            continue;
+        }
+
+        if (std.mem.eql(u8, "+", x)) {
+            op = .Add;
+            continue;
+        }
+
+        if (std.mem.eql(u8, "-", x)) {
+            op = .Sub;
+            continue;
+        }
+
+        const num = std.fmt.parseInt(i16, x, 10) catch return null;
+        if (op == .Add) {
+            offset += num;
+        } else {
+            offset -= num;
+        }
+    }
+
+    return @intCast(@as(i32, base) + offset);
+}
+
+fn is_memory_operand(operand: []const u8) bool {
+    var slice = operand;
+    if (std.mem.startsWith(u8, slice, "word ")) {
+        slice = slice[5..];
+    }
+    if (slice.len == 0) return false;
+    return slice[0] == '[';
+}
+
+fn get_operands(instruction: *i.instruction, register_map: *std.StringHashMap(*u16)) ?Operand {
+    if (instruction.is_memory and is_memory_operand(instruction.destination_reg)) {
+        const address = solve_memory_address(instruction, register_map) orelse return null;
+
+        if (!std.mem.eql(u8, "", instruction.source_reg)) {
+            if (register_map.get(instruction.source_reg)) |src_reg| {
+                return .{ .dst = .{ .mem = address }, .src = src_reg.* };
+            }
+        }
+        return .{ .dst = .{ .mem = address }, .src = instruction.source_int };
+    }
+
+    if (instruction.is_memory and is_memory_operand(instruction.source_reg)) {
+        const address = solve_memory_address_source(instruction, register_map) orelse return null;
+
+        if (std.mem.eql(u8, "", instruction.destination_reg)) return null;
+        const dst = register_map.get(instruction.destination_reg) orelse return null;
+
+        const lo = memory[address];
+        const hi = memory[address + 1];
+        const value: u16 = (@as(u16, hi) << 8) | lo;
+
+        return .{ .dst = .{ .reg = dst }, .src = value };
+    }
+
     if (std.mem.eql(u8, "", instruction.destination_reg)) return null;
     const dst = register_map.get(instruction.destination_reg) orelse return null;
 
     if (!std.mem.eql(u8, "", instruction.source_reg)) {
         if (register_map.get(instruction.source_reg)) |src_reg| {
-            return .{ .dst = dst, .src = src_reg.* };
+            return .{ .dst = .{ .reg = dst }, .src = src_reg.* };
         }
     }
 
-    return .{ .dst = dst, .src = instruction.source_int };
+    return .{ .dst = .{ .reg = dst }, .src = instruction.source_int };
 }
 
 fn simulate_mov(instruction: *i.instruction, register_map: *std.StringHashMap(*u16)) !void {
     const operands = get_operands(instruction, register_map) orelse return error.UnableToParseMovInstruction;
-    operands.dst.* = operands.src;
+
+    switch (operands.dst) {
+        .reg => |reg| {
+            reg.* = operands.src;
+        },
+        .mem => |addr| {
+            memory[addr] = @intCast(operands.src & 0xFF);
+            memory[addr + 1] = @intCast(operands.src >> 8);
+        },
+    }
 }
 
 fn simulate_add(instruction: *i.instruction, register_map: *std.StringHashMap(*u16), f: *flags) !void {
     const operands = get_operands(instruction, register_map) orelse return error.UnableToParseAddInstruction;
-    const result: i16 = @as(i16, @bitCast(operands.dst.*)) + @as(i16, @bitCast(operands.src));
-    operands.dst.* = @as(u16, @bitCast(result));
-    set_flags(operands.dst.*, f);
+
+    switch (operands.dst) {
+        .reg => |reg| {
+            const result = reg.* + operands.src;
+            reg.* = result;
+            set_flags(reg.*, f);
+        },
+        .mem => |addr| {
+            const lo = memory[addr];
+            const hi = memory[addr + 1];
+            const value: u16 = (@as(u16, hi) << 8) | lo;
+
+            const result = value + operands.src;
+            memory[addr] = @intCast(result & 0xFF);
+            memory[addr + 1] = @intCast(result >> 8);
+            set_flags(result, f);
+        },
+    }
 }
 
 fn simulate_sub(instruction: *i.instruction, register_map: *std.StringHashMap(*u16), f: *flags) !void {
     const operands = get_operands(instruction, register_map) orelse return error.UnableToParseSubInstruction;
-    const result: i16 = @as(i16, @bitCast(operands.dst.*)) - @as(i16, @bitCast(operands.src));
-    operands.dst.* = @as(u16, @bitCast(result));
-    set_flags(operands.dst.*, f);
+    const result: i16 = @as(i16, @bitCast(operands.dst.reg.*)) - @as(i16, @bitCast(operands.src));
+    operands.dst.reg.* = @as(u16, @bitCast(result));
+    set_flags(operands.dst.reg.*, f);
 }
 
 fn simulate_cmp(instruction: *i.instruction, register_map: *std.StringHashMap(*u16), f: *flags) !void {
     const operands = get_operands(instruction, register_map) orelse return error.UnableToParseCmpInstruction;
-    const result: i16 = @as(i16, @bitCast(operands.dst.*)) - @as(i16, @bitCast(operands.src));
+    const result: i16 = @as(i16, @bitCast(operands.dst.reg.*)) - @as(i16, @bitCast(operands.src));
     set_flags(@as(u16, @bitCast(result)), f);
+}
+
+fn simulate_jnz(instruction: *i.instruction, rs: *registers, f: *flags) !void {
+    const stdout = std.io.getStdOut().writer();
+    if (f.z == 1) {
+        return;
+    }
+
+    try stdout.print("Jumping to 0x{x}\n", .{instruction.jump_addr});
+    rs.ip = instruction.jump_addr;
+    try print_ip(rs.*);
+    // Horrible. Horrible. Horrible.
+    rs.ip -= instruction.size;
 }
 
 fn set_flags(result: u16, f: *flags) void {

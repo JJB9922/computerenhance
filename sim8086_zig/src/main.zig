@@ -45,14 +45,9 @@ pub fn main() !void {
 
     var registers = s.registers{};
     var flags = s.flags{};
+    @memset(&s.memory, 0);
 
-    for (0..binary_from_compiled_asm.len) |_| {
-
-        // EOF
-        if (registers.ip >= binary_from_compiled_asm.len) {
-            break;
-        }
-
+    while (registers.ip < binary_from_compiled_asm.len) {
         const immediate: []u8 = binary_from_compiled_asm[registers.ip .. registers.ip + 2];
 
         var instruction_ctx = try d.instruction_ctx_from_immediate(immediate);
@@ -62,11 +57,8 @@ pub fn main() !void {
 
         const instruction = try d.parse_instruction_to_string(allocator, instruction_ctx.binary, &instruction_ctx);
 
-        if (!simMode) {
-            try stdout.print("{s}\n", .{instruction});
-        } else {
-            try s.simulate_instructions(&registers, &flags, &instruction_ctx, allocator);
-        }
+        try stdout.print("| {s} | ", .{instruction});
+        try s.simulate_instructions(&registers, &flags, &instruction_ctx, allocator);
 
         registers.ip += instruction_ctx.size;
     }

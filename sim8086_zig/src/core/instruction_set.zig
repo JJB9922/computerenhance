@@ -44,6 +44,8 @@ pub const instruction = struct {
     source_reg: []const u8 = "",
     destination_reg: []const u8 = "",
     source_int: u16 = 0,
+    jump_addr: u16 = 0,
+    is_memory: bool = false,
 };
 
 pub const instructions = [_]instruction{
