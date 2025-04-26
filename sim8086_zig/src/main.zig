@@ -67,5 +67,12 @@ pub fn main() !void {
         try s.print_ip(registers);
         try s.print_registers(registers);
         try s.print_flags(flags);
+
+        const file = try std.fs.cwd().createFile("memory_dump.data", .{});
+        defer file.close();
+
+        try file.writeAll(&s.memory);
+
+        try stdout.print("\nDumped memory!\n", .{});
     }
 }
