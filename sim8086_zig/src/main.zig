@@ -8,12 +8,15 @@ pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     var simMode: bool = false;
+    var dump: bool = false;
 
     const args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
 
+    var listing_file: std.fs.File = undefined;
+
     if (args.len < 3) {
-        try stderr.print("Expected: ./sim8086_zig [-sim or -dis] {{listing binary}}\n", .{});
+        try stderr.print("Expected: ./sim8086_zig [-sim or -dis] [optional: -dump] {{listing binary}}\n", .{});
         return;
     }
 
@@ -21,12 +24,26 @@ pub fn main() !void {
         if (std.mem.eql(u8, args[1], "-sim")) {
             simMode = true;
         }
+        listing_file = std.fs.cwd().openFile(args[2], .{}) catch |err| {
+            try stderr.print("Could not open specified file\n", .{});
+            return err;
+        };
     }
 
-    var listing_file = std.fs.cwd().openFile(args[2], .{}) catch |err| {
-        try stderr.print("Could not open specified file\n", .{});
-        return err;
-    };
+    if (args.len == 4) {
+        if (std.mem.eql(u8, args[1], "-sim")) {
+            simMode = true;
+        }
+
+        if (std.mem.eql(u8, args[2], "-dump")) {
+            dump = true;
+        }
+
+        listing_file = std.fs.cwd().openFile(args[3], .{}) catch |err| {
+            try stderr.print("Could not open specified file\n", .{});
+            return err;
+        };
+    }
 
     defer listing_file.close();
 
@@ -68,11 +85,13 @@ pub fn main() !void {
         try s.print_registers(registers);
         try s.print_flags(flags);
 
-        const file = try std.fs.cwd().createFile("memory_dump.data", .{});
-        defer file.close();
+        if (dump) {
+            const file = try std.fs.cwd().createFile("memory_dump_0.data", .{});
+            defer file.close();
 
-        try file.writeAll(&s.memory);
+            try file.writeAll(&s.memory);
 
-        try stdout.print("\nDumped memory!\n", .{});
+            try stdout.print("\nDumped memory!\n", .{});
+        }
     }
 }

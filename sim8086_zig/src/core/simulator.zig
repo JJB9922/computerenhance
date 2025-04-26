@@ -43,6 +43,7 @@ const Operand = struct {
 };
 
 pub var memory: [1024 * 1024]u8 = undefined;
+pub var clocks: u32 = 0;
 
 pub fn print_registers(rs: registers) !void {
     const stdout = std.io.getStdOut().writer();
@@ -50,6 +51,7 @@ pub fn print_registers(rs: registers) !void {
     try stdout.print("AX: {d}, CX: {d}, DX: {d}, BX: {d}\n", .{ rs.ax, rs.cx, rs.dx, rs.bx });
     try stdout.print("SP: {d}, BP: {d}, SI: {d}, DI: {d}\n", .{ rs.sp, rs.bp, rs.si, rs.di });
     try stdout.print("IP: {d}\n", .{rs.ip});
+    try stdout.print("Estimated Num of Cycles: {d}\n", .{clocks});
 }
 
 pub fn print_flags(f: flags) !void {
@@ -246,10 +248,24 @@ fn simulate_mov(instruction: *i.instruction, register_map: *std.StringHashMap(*u
     switch (operands.dst) {
         .reg => |reg| {
             reg.* = operands.src;
+
+            if (instruction.is_memory and is_memory_operand(instruction.source_reg)) {
+                clocks += 8 + calculate_ea_cost(instruction);
+            } else if (!std.mem.eql(u8, "", instruction.source_reg)) {
+                clocks += 2;
+            } else {
+                clocks += 4;
+            }
         },
         .mem => |addr| {
             memory[addr] = @intCast(operands.src & 0xFF);
             memory[addr + 1] = @intCast(operands.src >> 8);
+
+            if (!std.mem.eql(u8, "", instruction.source_reg)) {
+                clocks += 9 + calculate_ea_cost(instruction);
+            } else {
+                clocks += 10 + calculate_ea_cost(instruction);
+            }
         },
     }
 }
@@ -262,6 +278,14 @@ fn simulate_add(instruction: *i.instruction, register_map: *std.StringHashMap(*u
             const result = reg.* + operands.src;
             reg.* = result;
             set_flags(reg.*, f);
+
+            if (instruction.is_memory and is_memory_operand(instruction.source_reg)) {
+                clocks += 8 + calculate_ea_cost(instruction);
+            } else if (!std.mem.eql(u8, "", instruction.source_reg)) {
+                clocks += 3;
+            } else {
+                clocks += 4;
+            }
         },
         .mem => |addr| {
             const lo = memory[addr];
@@ -272,6 +296,12 @@ fn simulate_add(instruction: *i.instruction, register_map: *std.StringHashMap(*u
             memory[addr] = @intCast(result & 0xFF);
             memory[addr + 1] = @intCast(result >> 8);
             set_flags(result, f);
+
+            if (!std.mem.eql(u8, "", instruction.source_reg)) {
+                clocks += 16 + calculate_ea_cost(instruction);
+            } else {
+                clocks += 17 + calculate_ea_cost(instruction);
+            }
         },
     }
 }
@@ -292,17 +322,67 @@ fn simulate_cmp(instruction: *i.instruction, register_map: *std.StringHashMap(*u
 fn simulate_jnz(instruction: *i.instruction, rs: *registers, f: *flags) !void {
     const stdout = std.io.getStdOut().writer();
     if (f.z == 1) {
+        clocks += 4;
         return;
     }
 
     try stdout.print("Jumping to 0x{x}\n", .{instruction.jump_addr});
     rs.ip = instruction.jump_addr;
     try print_ip(rs.*);
-    // Horrible. Horrible. Horrible.
     rs.ip -= instruction.size;
+
+    clocks += 16;
 }
 
 fn set_flags(result: u16, f: *flags) void {
     f.z = if (result == 0) 1 else 0;
     f.s = if ((result & 0x8000) != 0) 1 else 0;
+}
+
+fn calculate_ea_cost(instruction: *i.instruction) u32 {
+    var slice = instruction.destination_reg;
+    if (instruction.is_memory and is_memory_operand(instruction.source_reg)) {
+        slice = instruction.source_reg;
+    }
+    if (std.mem.startsWith(u8, slice, "word ")) {
+        slice = slice[5..];
+    }
+    if (slice.len == 0 or slice[0] != '[') {
+        return 0;
+    }
+    slice = slice[1 .. slice.len - 1];
+
+    var num_regs: u32 = 0;
+    var has_disp: bool = false;
+
+    var it = std.mem.splitSequence(u8, slice, " ");
+    while (it.next()) |x| {
+        if (std.mem.eql(u8, "+", x) or std.mem.eql(u8, "-", x)) {
+            continue;
+        }
+
+        const parse = std.fmt.parseInt(i16, x, 10) catch 0;
+
+        if (parse > 0) {
+            has_disp = true;
+            continue;
+        }
+        num_regs += 1;
+    }
+
+    var cost: u32 = 0;
+
+    if (num_regs == 1) {
+        cost = 5;
+    } else if (num_regs == 2) {
+        cost = 7;
+    } else {
+        cost = 5;
+    }
+
+    if (has_disp) {
+        cost += 4;
+    }
+
+    return cost;
 }
