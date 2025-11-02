@@ -1,5 +1,5 @@
 rmdir build /s /q
 mkdir build
 
-clang -O3 haversine_generator.c -o build\haversine_generator.exe
+clang -g -O0 json_parser.c -o build\json_parser.exe
 

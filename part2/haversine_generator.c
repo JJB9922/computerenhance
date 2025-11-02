@@ -196,7 +196,7 @@ int main(int argc, char *argv[])
   fclose(haversine_json_file);
 
   char buf[256];
-  sprintf(buf, "%.16f\n", estimated_total / n_pairs);
+  sprintf(buf, "%.16f", estimated_total / n_pairs);
 
   fprintf(haversine_value_file, "%s", buf);
   fclose(haversine_value_file);
