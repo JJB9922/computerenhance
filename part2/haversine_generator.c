@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <windows.h>
 
 //
 // Task: generate a json file:
@@ -87,6 +88,12 @@ int main(int argc, char *argv[])
     goto bad_args;
   }
 
+  LARGE_INTEGER StartingTime, EndingTime, ElapsedMicroseconds;
+  LARGE_INTEGER Frequency;
+
+  QueryPerformanceFrequency(&Frequency);
+  QueryPerformanceCounter(&StartingTime);
+
   mf64 estimated_total = 0.0;
   pair_t *pairs = malloc(n_pairs * sizeof(pair_t));
 
@@ -109,7 +116,7 @@ int main(int argc, char *argv[])
   }
   else
   {
-    mu32 n_clusters = 64;
+    mu32 n_clusters = 32;
     mu32 j = 0;
     mu32 n_per_cluster = n_pairs;
 
@@ -156,6 +163,11 @@ int main(int argc, char *argv[])
       }
     }
   }
+
+  QueryPerformanceCounter(&EndingTime);
+  LONGLONG elapsed_micro = EndingTime.QuadPart - StartingTime.QuadPart;
+  double elapsed_sec = (double)elapsed_micro / (double)Frequency.QuadPart;
+  printf("Elapsed time to generate pairs: %.6f\n", elapsed_sec);
 
   printf("Method: %s\n", is_cluster ? "cluster" : "uniform");
   printf("Seed: %d\n", seed);
